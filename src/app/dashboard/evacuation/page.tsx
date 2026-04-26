@@ -269,7 +269,26 @@ export default function EvacuationPage() {
       return;
     }
     const d = await r.json();
-    setEvacuation(d.evacuation);
+    // После закрытия очищаем форму на клиенте, чтобы сразу начать следующий цикл.
+    setEvacuation((prev) =>
+      prev
+        ? {
+            ...d.evacuation,
+            plate: "",
+            ownerNickname: "",
+            violation: "",
+            description: "",
+            photoUrls: "[]",
+            pickupLat: null,
+            pickupLng: null,
+          }
+        : d.evacuation,
+    );
+    setPickedLat(1794);
+    setPickedLng(4151);
+    setQ("");
+    setHits([]);
+    setHistory([]);
     setMsg(`ТС сдано на штрафстоянку. Эвакуация закрыта. +${d.xpGain} XP (уровень ${d.level}, всего XP ${d.xp}).`);
   }
 
@@ -408,16 +427,6 @@ export default function EvacuationPage() {
           <p className="text-xs text-[var(--dor-muted)]">
             Статус: <strong>{STATUS_RU[evacuation.status] ?? evacuation.status}</strong>
           </p>
-          <div className="mt-3 rounded-xl border border-[var(--dor-border)] bg-[var(--dor-surface)]/50 p-3 text-sm">
-            <p className="font-medium">Порядок действий</p>
-            <ol className="mt-1 list-decimal space-y-1 pl-5 text-[var(--dor-muted)]">
-              <li>Сохраните данные эвакуации.</li>
-              <li>Отметьте точку на карте и нажмите «Создать тикет».</li>
-              <li>Сделайте фото и загрузите их в тикет.</li>
-              <li>Нажмите «Старт перевозки» (статус «В пути»).</li>
-              <li>По прибытии нажмите «Сдал на штрафстоянку».</li>
-            </ol>
-          </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-xs text-[var(--dor-muted)]">Номер</label>

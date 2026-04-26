@@ -6,7 +6,13 @@ import { playSound } from "@/lib/sounds";
 
 const INTERVAL_MS = 10 * 60 * 1000;
 
-export function PingReminder() {
+export function PingReminder({
+  focusLat,
+  focusLng,
+}: {
+  focusLat?: number | null;
+  focusLng?: number | null;
+}) {
   const [last, setLast] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [lat, setLat] = useState<number | null>(null);
@@ -54,6 +60,13 @@ export function PingReminder() {
   // Отображаем либо выбранную точку, либо последнюю сохранённую
   const displayLat = lat ?? savedLat;
   const displayLng = lng ?? savedLng;
+
+  useEffect(() => {
+    if (focusLat == null || focusLng == null) return;
+    setLat(focusLat);
+    setLng(focusLng);
+    setStatus("📍 Точка вызова установлена на карте. При необходимости отправьте новую отметку.");
+  }, [focusLat, focusLng]);
 
   async function submitPing() {
     setStatus(null);
@@ -110,6 +123,7 @@ export function PingReminder() {
 
       <div className="mt-4">
         <MapClient
+          key={`${displayLat ?? "none"}:${displayLng ?? "none"}`}
           onPick={(a, b) => { setLat(a); setLng(b); }}
           initialLat={displayLat ?? undefined}
           initialLng={displayLng ?? undefined}

@@ -57,6 +57,7 @@ export default function DashboardPage() {
   const [openCalls, setOpenCalls] = useState<DispatchCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"main" | "vehicles" | "discipline">("main");
+  const [focusCallPoint, setFocusCallPoint] = useState<{ lat: number; lng: number } | null>(null);
 
   const refresh = useCallback(async () => {
     const [rme, rs, rdc] = await Promise.all([
@@ -136,12 +137,16 @@ export default function DashboardPage() {
     refresh();
   }
 
-  async function respondCall(id: string, action: "accept" | "done") {
-    await fetch(`/api/dispatch/${id}`, {
+  async function respondCall(call: DispatchCall, action: "accept" | "done") {
+    await fetch(`/api/dispatch/${call.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
+    if (action === "accept" && call.lat != null && call.lng != null) {
+      setFocusCallPoint({ lat: call.lat, lng: call.lng });
+      setTab("main");
+    }
     refresh();
   }
 
@@ -252,11 +257,23 @@ export default function DashboardPage() {
                 <div className="flex gap-2">
                   {c.status === "OPEN" && (
                     <button type="button" className="dor-btn-primary text-xs"
-                      onClick={() => respondCall(c.id, "accept")}>Принять</button>
+                      onClick={() => respondCall(c, "accept")}>Принять</button>
                   )}
                   {c.status === "ACCEPTED" && (
                     <button type="button" className="dor-btn-secondary text-xs"
-                      onClick={() => respondCall(c.id, "done")}>Выполнено</button>
+                      onClick={() => respondCall(c, "done")}>Выполнено</button>
+                  )}
+                  {c.lat != null && c.lng != null && (
+                    <button
+                      type="button"
+                      className="dor-btn-secondary text-xs"
+                      onClick={() => {
+                        setFocusCallPoint({ lat: c.lat!, lng: c.lng! });
+                        setTab("main");
+                      }}
+                    >
+                      Показать точку на карте
+                    </button>
                   )}
                 </div>
               </div>
@@ -434,7 +451,10 @@ export default function DashboardPage() {
             </section>
 
             {/* Контроль присутствия */}
-            <PingReminder />
+            <PingReminder
+              focusLat={focusCallPoint?.lat}
+              focusLng={focusCallPoint?.lng}
+            />
           </div>
         )}
 
