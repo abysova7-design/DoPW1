@@ -7,6 +7,7 @@ import {
   CIVIC_CATEGORY_LABELS,
   isCivicCategory,
 } from "@/lib/civic-help";
+import { tryAutoAssignLogisticsCivic } from "@/lib/civic-assign";
 
 const SCHEMA_HINT =
   "Администратору сервера: в каталоге проекта выполните npx prisma db push && npx prisma generate и перезапустите приложение.";
@@ -63,6 +64,8 @@ export async function POST(req: Request) {
   const phone = String(body?.phone ?? "").trim();
   const lat = typeof body?.lat === "number" ? body.lat : Number.NaN;
   const lng = typeof body?.lng === "number" ? body.lng : Number.NaN;
+  const endLat = typeof body?.endLat === "number" ? body.endLat : Number.NaN;
+  const endLng = typeof body?.endLng === "number" ? body.endLng : Number.NaN;
 
   if (!fullName || fullName.length > 120) {
     return NextResponse.json(
@@ -88,6 +91,14 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  if (category === "LOGISTICS") {
+    if (!Number.isFinite(endLat) || !Number.isFinite(endLng)) {
+      return NextResponse.json(
+        { error: "Для логистики укажите две точки на карте: забрать и доставить" },
+        { status: 400 },
+      );
+    }
+  }
 
   if (!(await publicAssistanceSchemaReady())) {
     return NextResponse.json(
@@ -109,9 +120,16 @@ export async function POST(req: Request) {
         phone,
         lat,
         lng,
+        endLat: category === "LOGISTICS" ? endLat : null,
+        endLng: category === "LOGISTICS" ? endLng : null,
         status: "OPEN",
       },
     });
+
+    let autoAssigned = false;
+    if (category === "LOGISTICS") {
+      autoAssigned = await tryAutoAssignLogisticsCivic(request.id);
+    }
 
     const dispatchers = await prisma.user.findMany({
       where: { OR: [{ isDispatcher: true }, { isAdmin: true }] },
@@ -136,7 +154,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, id: request.id });
+    return NextResponse.json({ ok: true, id: request.id, autoAssigned });
   } catch (e) {
     console.error("[public-assistance] POST", e);
     return NextResponse.json(

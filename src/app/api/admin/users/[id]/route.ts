@@ -133,3 +133,38 @@ export async function PATCH(
 
   return NextResponse.json({ user: updated });
 }
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  const admin = await requireAdmin();
+  if (!admin) return NextResponse.json({ error: "Только админ" }, { status: 403 });
+
+  const { id } = await ctx.params;
+  if (id === admin.id) {
+    return NextResponse.json({ error: "Нельзя удалить свою учётную запись" }, { status: 400 });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id } });
+  if (!target) return NextResponse.json({ error: "Пользователь не найден" }, { status: 404 });
+
+  if (target.isAdmin) {
+    const adminCount = await prisma.user.count({ where: { isAdmin: true } });
+    if (adminCount <= 1) {
+      return NextResponse.json({ error: "Нельзя удалить последнего администратора" }, { status: 400 });
+    }
+  }
+
+  await prisma.user.delete({ where: { id } });
+
+  await postOrder(
+    `Исключение из штата — ${target.nickname}`,
+    `Учётная запись удалена администратором ${admin.nickname}.
+Дата: ${new Date().toLocaleString("ru-RU")}`,
+    "📋",
+    admin.id,
+  );
+
+  return NextResponse.json({ ok: true });
+}

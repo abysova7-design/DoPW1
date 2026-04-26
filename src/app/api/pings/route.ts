@@ -36,5 +36,27 @@ export async function POST(req: Request) {
     },
   });
 
+  const IMG = 6000;
+  const clamp = (v: number) => Math.max(0, Math.min(IMG, v));
+  const group = await prisma.patrolGroup.findFirst({
+    where: { OR: [{ leaderId: user.id }, { partnerId: user.id }] },
+  });
+  if (group) {
+    const buddyId =
+      group.leaderId === user.id ? group.partnerId : group.leaderId;
+    if (buddyId) {
+      const ox = group.leaderId === user.id ? 18 : -18;
+      const oy = group.leaderId === user.id ? 18 : -18;
+      await prisma.locationPing.create({
+        data: {
+          userId: buddyId,
+          lat: clamp(lat + ox),
+          lng: clamp(lng + oy),
+          label: "Пара патруля",
+        },
+      });
+    }
+  }
+
   return NextResponse.json({ ping });
 }

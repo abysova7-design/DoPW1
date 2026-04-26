@@ -22,6 +22,8 @@ const TYPE_ICON: Record<string, string> = {
   SYSTEM: "🔔",
   JOB_APPLICATION: "🧾",
   CIVIC_HELP: "🆘",
+  ROAD_PATROL_REPORT: "🛣️",
+  STAFF_COMPLAINT: "📛",
 };
 
 export function NotificationsBell() {
@@ -57,7 +59,9 @@ export function NotificationsBell() {
             n.type === "DISPATCH" ||
             n.type === "CALL_BASE" ||
             n.type === "BROADCAST" ||
-            n.type === "CIVIC_HELP",
+            n.type === "CIVIC_HELP" ||
+            n.type === "ROAD_PATROL_REPORT" ||
+            n.type === "STAFF_COMPLAINT",
         );
         const hasInterview = unreadNew.some((n) => n.type === "JOB_APPLICATION");
         const hasExam = unreadNew.some((n) => n.type === "TASK_ASSIGNED");

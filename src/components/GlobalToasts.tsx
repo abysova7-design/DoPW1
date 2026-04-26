@@ -11,6 +11,7 @@ type DispatchCall = {
   body: string;
   status: string;
   createdAt: string;
+  targetId?: string | null;
 };
 
 const TYPE_ICON: Record<string, string> = {
@@ -21,6 +22,8 @@ const TYPE_ICON: Record<string, string> = {
   SYSTEM: "🔔",
   JOB_APPLICATION: "🧾",
   CIVIC_HELP: "🆘",
+  ROAD_PATROL_REPORT: "🛣️",
+  STAFF_COMPLAINT: "📛",
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -31,6 +34,8 @@ const TYPE_COLOR: Record<string, string> = {
   SYSTEM: "#30363d",
   JOB_APPLICATION: "#a855f7",
   CIVIC_HELP: "#f59e0b",
+  ROAD_PATROL_REPORT: "#ec4899",
+  STAFF_COMPLAINT: "#ef4444",
 };
 
 export function GlobalToasts() {
@@ -64,7 +69,9 @@ export function GlobalToasts() {
         n.type === "DISPATCH" ||
         n.type === "CALL_BASE" ||
         n.type === "BROADCAST" ||
-        n.type === "CIVIC_HELP",
+        n.type === "CIVIC_HELP" ||
+        n.type === "ROAD_PATROL_REPORT" ||
+        n.type === "STAFF_COMPLAINT",
     );
     const hasInterview =
       !hasCall && newOnes.some((n) => n.type === "JOB_APPLICATION");
@@ -87,8 +94,17 @@ export function GlobalToasts() {
   }, [dismiss]);
 
   const pollDispatch = useCallback(async () => {
-    const r = await fetch("/api/dispatch", { cache: "no-store" }).catch(() => null);
+    const [rMe, r] = await Promise.all([
+      fetch("/api/auth/me", { cache: "no-store" }).catch(() => null),
+      fetch("/api/dispatch", { cache: "no-store" }).catch(() => null),
+    ]);
     if (!r?.ok) return;
+    const meD = rMe?.ok
+      ? await safeJson<{ user?: { id: string; isDispatcher?: boolean; isAdmin?: boolean } }>(rMe, {})
+      : {};
+    const myId = meD.user?.id;
+    const dispatchLike = Boolean(meD.user?.isDispatcher || meD.user?.isAdmin);
+
     const d = await safeJson<{ calls?: DispatchCall[] }>(r, {});
     const calls = (d.calls ?? []).filter((c) =>
       c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED",
@@ -97,7 +113,11 @@ export function GlobalToasts() {
       window.dispatchEvent(new CustomEvent("dopw:dispatch-updated", { detail: { calls } }));
     }
     const newCalls = calls.filter((c) => !prevDispatchIds.current.has(c.id));
-    if (newCalls.length > 0 && prevDispatchIds.current.size > 0) {
+    const relevant =
+      dispatchLike && myId
+        ? newCalls.filter((c) => !c.targetId || c.targetId === myId)
+        : newCalls;
+    if (relevant.length > 0 && prevDispatchIds.current.size > 0) {
       playSound("dispatch");
     }
     calls.forEach((c) => prevDispatchIds.current.add(c.id));

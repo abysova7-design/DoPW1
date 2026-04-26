@@ -32,6 +32,7 @@ export const TASK_KIND_LABELS: Record<string, string> = {
   CONSTRUCTION_SUPPORT: "Сопровождение стройки 🏗️",
   CONSTRUCTION_SITE: "Строительство 👷",
   ADMIN_PAPERWORK: "Административная работа 📄",
+  ROAD_PATROL: "Дорожный патруль 🛣️",
 };
 
 export const ISSUER_RANKS: PositionRank[] = [
@@ -55,6 +56,14 @@ export const EXAMINER_RANKS: PositionRank[] = [
 
 export function canExamine(rank: PositionRank): boolean {
   return EXAMINER_RANKS.includes(rank);
+}
+
+/** Дорожный патруль — со 2-го ранга (Engineer I и выше), не техник. */
+export const MIN_RANK_FOR_ROAD_PATROL: PositionRank = "ENGINEER_I";
+
+export function canTakeRoadPatrol(rank: PositionRank, isAdmin: boolean): boolean {
+  if (isAdmin) return true;
+  return RANK_ORDER.indexOf(rank) >= RANK_ORDER.indexOf(MIN_RANK_FOR_ROAD_PATROL);
 }
 
 /** Просмотр заявок на работу / HR: заместители, директор, админ */

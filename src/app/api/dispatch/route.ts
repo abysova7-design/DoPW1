@@ -10,6 +10,8 @@ const BASE_CALL_SELECT = {
   status: true,
   lat: true,
   lng: true,
+  endLat: true,
+  endLng: true,
   createdAt: true,
   closedAt: true,
   creatorId: true,
@@ -76,6 +78,9 @@ export async function POST(req: Request) {
   }
 
   const reportCols = await hasReportColumns();
+  const endLat = typeof body?.endLat === "number" ? body.endLat : null;
+  const endLng = typeof body?.endLng === "number" ? body.endLng : null;
+
   const call = await prisma.dispatchCall.create({
     data: {
       id: randomUUID(),
@@ -85,6 +90,8 @@ export async function POST(req: Request) {
       body: bodyText,
       lat: lat ?? undefined,
       lng: lng ?? undefined,
+      endLat: endLat ?? undefined,
+      endLng: endLng ?? undefined,
     },
     select: {
       ...BASE_CALL_SELECT,

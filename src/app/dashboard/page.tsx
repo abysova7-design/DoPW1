@@ -13,6 +13,7 @@ import {
   RANK_LABELS,
   TASK_KIND_LABELS,
   canManageJobApplications,
+  canTakeRoadPatrol,
   xpForLevel,
   type PositionRank,
 } from "@/lib/positions";
@@ -50,6 +51,7 @@ type DispatchCall = {
   createdAt: string;
   creator: { nickname: string };
   targetId?: string | null;
+  target?: { nickname: string } | null;
   reportText?: string | null;
 };
 
@@ -65,6 +67,7 @@ export default function DashboardPage() {
   const [reportText, setReportText] = useState("");
   const pingSectionRef = useRef<HTMLDivElement>(null);
   const knownCallIdsRef = useRef<Set<string>>(new Set());
+  const meRef = useRef<Me | null>(null);
   const radio = useRadio();
 
   const refresh = useCallback(async () => {
@@ -76,6 +79,7 @@ export default function DashboardPage() {
     const dme = await rme.json().catch(() => ({}));
     if (!dme.user) { router.replace("/login"); return; }
     setMe(dme.user);
+    meRef.current = dme.user;
     const ds = await rs.json().catch(() => ({}));
     setShift(ds.shift);
     const ddc = await rdc.json().catch(() => ({}));
@@ -83,12 +87,18 @@ export default function DashboardPage() {
       (c: DispatchCall) =>
         c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
     );
-    const newForMe = nextCalls.filter((c: DispatchCall) => !knownCallIdsRef.current.has(c.id));
+    const personalCalls =
+      dme.user.isDispatcher || dme.user.isAdmin
+        ? nextCalls.filter(
+            (c: DispatchCall) => !c.targetId || c.targetId === dme.user.id,
+          )
+        : nextCalls;
+    const newForMe = personalCalls.filter((c: DispatchCall) => !knownCallIdsRef.current.has(c.id));
     if (knownCallIdsRef.current.size > 0 && newForMe.length > 0) {
       playSound("dispatch");
     }
-    nextCalls.forEach((c: DispatchCall) => knownCallIdsRef.current.add(c.id));
-    setOpenCalls(nextCalls);
+    personalCalls.forEach((c: DispatchCall) => knownCallIdsRef.current.add(c.id));
+    setOpenCalls(personalCalls);
     setLoading(false);
   }, [router]);
 
@@ -105,10 +115,14 @@ export default function DashboardPage() {
   useEffect(() => {
     function onDispatchUpdated(e: Event) {
       const evt = e as CustomEvent<{ calls?: DispatchCall[] }>;
-      const calls = evt.detail?.calls ?? [];
-      setOpenCalls(
-        calls.filter((c) => c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE"),
+      let calls = (evt.detail?.calls ?? []).filter(
+        (c) => c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
       );
+      const u = meRef.current;
+      if (u?.isDispatcher || u?.isAdmin) {
+        calls = calls.filter((c) => !c.targetId || c.targetId === u.id);
+      }
+      setOpenCalls(calls);
     }
     window.addEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
     return () => window.removeEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
@@ -152,6 +166,10 @@ export default function DashboardPage() {
     }
     if (kind === "TOW_TRUCK") {
       router.push("/dashboard/evacuation");
+      return;
+    }
+    if (kind === "ROAD_PATROL") {
+      router.push("/dashboard/road-patrol");
       return;
     }
     refresh();
@@ -411,6 +429,11 @@ export default function DashboardPage() {
                     🚛 Открыть панель
                   </Link>
                 )}
+                {activeTask.kind === "ROAD_PATROL" && (
+                  <Link href="/dashboard/road-patrol" className="dor-btn-primary text-xs">
+                    🛣️ Панель патруля
+                  </Link>
+                )}
                 <button type="button" className="dor-btn-secondary text-xs" onClick={endTask}>
                   Завершить задачу
                 </button>
@@ -421,15 +444,25 @@ export default function DashboardPage() {
                 <div className="flex flex-wrap gap-2">
                   {(Object.entries(TASK_KIND_LABELS) as [TaskKind, string][]).map(([k, label]) => {
                     const needsCert = k === "TOW_TRUCK" && !me.towTruckCert;
+                    const needsRank = k === "ROAD_PATROL" && !canTakeRoadPatrol(me.positionRank, me.isAdmin);
+                    const locked = needsCert || needsRank;
+                    const title = needsCert
+                      ? "Требуется допуск на эвакуатор"
+                      : needsRank
+                        ? "Дорожный патруль со 2-го ранга (Engineer I) и выше"
+                        : undefined;
                     return (
                       <button
                         key={k}
                         type="button"
-                        title={needsCert ? "Требуется допуск на эвакуатор" : undefined}
-                        className={`dor-btn-secondary text-sm ${needsCert ? "opacity-40" : ""}`}
-                        onClick={() => needsCert ? router.push("/dashboard/knowledge/evacuation") : startTask(k)}
+                        title={title}
+                        className={`dor-btn-secondary text-sm ${locked ? "opacity-40" : ""}`}
+                        onClick={() => {
+                          if (needsCert) router.push("/dashboard/knowledge/evacuation");
+                          else if (!needsRank) startTask(k);
+                        }}
                       >
-                        {label}{needsCert ? " 🔒" : ""}
+                        {label}{locked ? " 🔒" : ""}
                       </button>
                     );
                   })}

@@ -11,6 +11,7 @@ import { RANK_LABELS } from "@/lib/positions";
 import { useRadio } from "@/components/RadioProvider";
 import { playSound } from "@/lib/sounds";
 import { CIVIC_CATEGORY_LABELS, isCivicCategory } from "@/lib/civic-help";
+import { PATROL_REPORT_KINDS } from "@/lib/road-patrol";
 
 type CivicRequest = {
   id: string;
@@ -20,6 +21,8 @@ type CivicRequest = {
   phone: string;
   lat: number;
   lng: number;
+  endLat: number | null;
+  endLng: number | null;
   status: string;
   createdAt: string;
 };
@@ -53,6 +56,29 @@ type Worker = {
   } | null;
 };
 
+type RoadClosureRow = {
+  id: string;
+  lat: number;
+  lng: number;
+  title: string;
+  description: string | null;
+  createdAt: string;
+  authorId: string;
+  author: { nickname: string; displayName: string | null };
+};
+
+type RoadPatrolReportRow = {
+  id: string;
+  kind: string;
+  note: string;
+  lat: number | null;
+  lng: number | null;
+  status: string;
+  reviewNote: string | null;
+  createdAt: string;
+  author: { nickname: string; displayName: string | null };
+};
+
 type Call = {
   id: string;
   title: string;
@@ -60,6 +86,8 @@ type Call = {
   status: string;
   lat: number | null;
   lng: number | null;
+  endLat?: number | null;
+  endLng?: number | null;
   createdAt: string;
   creator: { nickname: string; displayName: string | null };
   target: { nickname: string; displayName: string | null } | null;
@@ -99,6 +127,10 @@ export default function DispatchPage() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [civicRequests, setCivicRequests] = useState<CivicRequest[]>([]);
   const [civicPollReady, setCivicPollReady] = useState(false);
+  const [patrolReports, setPatrolReports] = useState<RoadPatrolReportRow[]>([]);
+  const [patrolReportDetail, setPatrolReportDetail] = useState<RoadPatrolReportRow | null>(null);
+  const [patrolReviewNote, setPatrolReviewNote] = useState("");
+  const [closures, setClosures] = useState<RoadClosureRow[]>([]);
   const [civicAssignId, setCivicAssignId] = useState<string | null>(null);
   const [civicEmployeeId, setCivicEmployeeId] = useState("");
   const [civicBusy, setCivicBusy] = useState(false);
@@ -139,6 +171,20 @@ export default function DispatchPage() {
       setCivicPollReady(true);
     } else {
       setCivicRequests([]);
+    }
+
+    const pr = await fetch("/api/road-patrol/reports", { cache: "no-store" });
+    if (pr.ok) {
+      const prd = await pr.json().catch(() => ({}));
+      setPatrolReports(prd.reports ?? []);
+    }
+
+    const cl = await fetch("/api/road-patrol/closures", { cache: "no-store" });
+    if (cl.ok) {
+      const cld = await cl.json().catch(() => ({}));
+      setClosures(cld.closures ?? []);
+    } else {
+      setClosures([]);
     }
   }, [router]);
 
@@ -202,6 +248,21 @@ export default function DispatchPage() {
     load();
   }
 
+  async function closeRoadClosure(id: string) {
+    const r = await fetch(`/api/road-patrol/closures/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "close" }),
+    });
+    if (!r.ok) {
+      const e2 = await r.json().catch(() => ({}));
+      setMsg(e2.error ?? "Не удалось снять перекрытие");
+      return;
+    }
+    setMsg("Перекрытие снято с карты.");
+    load();
+  }
+
   async function submitCivicAssign() {
     if (!civicAssignId || !civicEmployeeId) return;
     setCivicBusy(true);
@@ -231,6 +292,17 @@ export default function DispatchPage() {
     load();
   }
 
+  async function reviewPatrolReport(id: string, action: "approve" | "reject") {
+    await fetch(`/api/road-patrol/reports/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, reviewNote: patrolReviewNote }),
+    });
+    setPatrolReportDetail(null);
+    setPatrolReviewNote("");
+    load();
+  }
+
   const workerMarkers = workers
     .filter((w) => w.lastPing)
     .map((w) => {
@@ -246,12 +318,27 @@ export default function DispatchPage() {
         lng: w.lastPing!.lng,
         stale,
         evacuating: Boolean(w.activeEvacuation),
+        roadPatrol: w.activeTask?.kind === "ROAD_PATROL",
       };
     });
   const activeEvacuations = workers.filter((w) => w.activeEvacuation);
   const activeCallMarkers = calls
     .filter((c) => (c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED") && c.lat != null && c.lng != null)
-    .map((c) => ({ id: c.id, lat: c.lat as number, lng: c.lng as number, title: c.title }));
+    .map((c) => ({
+      id: c.id,
+      lat: c.lat as number,
+      lng: c.lng as number,
+      title: c.title,
+      endLat: c.endLat,
+      endLng: c.endLng,
+    }));
+  const closureMapMarkers = closures.map((c) => ({
+    id: c.id,
+    lat: c.lat,
+    lng: c.lng,
+    title: c.title,
+    description: c.description,
+  }));
   const EVAC_STATUS_RU: Record<string, string> = {
     ACTIVE: "Ведется эвакуация",
     DELIVERED: "В пути",
@@ -288,16 +375,51 @@ export default function DispatchPage() {
           <h2 className="font-semibold">Карта — расположение сотрудников</h2>
           <p className="mt-1 text-xs text-[var(--dor-muted)]">
             Оранжевые точки — сотрудники с активной сменой (данные с последнего чек-ина).
+            ⛔ — перекрытия от патруля. Красный/зелёный вызов с линией — маршрут (А→Б).
             Кликните по карте, чтобы отметить точку вызова.
           </p>
           <div className="mt-3">
             <DispatchMapClient
               workers={workerMarkers}
               callMarkers={activeCallMarkers}
+              closureMarkers={closureMapMarkers}
               onPick={(a, b) => { setPickedLat(a); setPickedLng(b); }}
               pickedLat={pickedLat}
               pickedLng={pickedLng}
             />
+          </div>
+          <div className="mt-4 border-t border-[var(--dor-border)] pt-4">
+            <h3 className="text-sm font-semibold">⛔ Перекрытия (дорожный патруль)</h3>
+            {closures.length === 0 ? (
+              <p className="mt-2 text-xs text-[var(--dor-muted)]">Нет активных меток.</p>
+            ) : (
+              <ul className="mt-2 space-y-2">
+                {closures.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-start justify-between gap-2 rounded-xl border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-sm"
+                  >
+                    <div>
+                      <div className="font-medium">{c.title}</div>
+                      <div className="text-xs text-[var(--dor-muted)]">
+                        {c.author.displayName ?? c.author.nickname} · {Math.round(c.lat)}, {Math.round(c.lng)} ·{" "}
+                        {new Date(c.createdAt).toLocaleString("ru-RU")}
+                      </div>
+                      {c.description ? (
+                        <p className="mt-1 text-xs text-[var(--dor-muted)]">{c.description}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="dor-btn-secondary shrink-0 text-xs"
+                      onClick={() => closeRoadClosure(c.id)}
+                    >
+                      Снять с карты
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
 
@@ -468,8 +590,11 @@ export default function DispatchPage() {
                   <p className="mt-1 text-sm text-[var(--dor-muted)]">{req.description}</p>
                   <p className="mt-1 text-xs text-[var(--dor-muted)]">📞 {req.phone}</p>
                   <p className="mt-1 text-xs text-[var(--dor-muted)]">
-                    📍 {Math.round(req.lat)}, {Math.round(req.lng)} ·{" "}
-                    {new Date(req.createdAt).toLocaleString("ru-RU")}
+                    📍 А: {Math.round(req.lat)}, {Math.round(req.lng)}
+                    {req.endLat != null && req.endLng != null
+                      ? ` · Б: ${Math.round(req.endLat)}, ${Math.round(req.endLng)}`
+                      : ""}{" "}
+                    · {new Date(req.createdAt).toLocaleString("ru-RU")}
                   </p>
                   {req.status === "OPEN" ? (
                     <div className="mt-2 flex flex-wrap gap-2">
@@ -539,6 +664,114 @@ export default function DispatchPage() {
                   }}
                 >
                   Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <section className="dor-card p-5">
+          <h2 className="font-semibold">🛣️ Отчёты дорожного патруля</h2>
+          <p className="mt-1 text-xs text-[var(--dor-muted)]">
+            Проверка действий патруля: заправки, ремонты, блок-посты и др. (+XP сотруднику уже начислен при отправке.)
+          </p>
+          <div className="mt-3 space-y-2">
+            {patrolReports.filter((r) => r.status === "PENDING" || r.status === "NEEDS_WORK").length ===
+            0 ? (
+              <p className="text-sm text-[var(--dor-muted)]">Нет отчётов на проверке.</p>
+            ) : (
+              patrolReports
+                .filter((r) => r.status === "PENDING" || r.status === "NEEDS_WORK")
+                .map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-3"
+                  >
+                    <div>
+                      <div className="text-sm font-medium">
+                        {(PATROL_REPORT_KINDS as Record<string, string>)[r.kind] ?? r.kind} ·{" "}
+                        {r.author.displayName ?? r.author.nickname}
+                      </div>
+                      <div className="text-xs text-[var(--dor-muted)]">
+                        {new Date(r.createdAt).toLocaleString("ru-RU")} · {r.status}
+                      </div>
+                      {r.note ? (
+                        <p className="mt-1 line-clamp-2 text-xs text-[var(--dor-muted)]">{r.note}</p>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="dor-btn-secondary text-xs"
+                      onClick={() => {
+                        setPatrolReportDetail(r);
+                        setPatrolReviewNote("");
+                      }}
+                    >
+                      Открыть
+                    </button>
+                  </div>
+                ))
+            )}
+          </div>
+        </section>
+
+        {patrolReportDetail ? (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="dor-card max-h-[90vh] max-w-lg space-y-3 overflow-y-auto p-5">
+              <h3 className="font-semibold">Отчёт патруля</h3>
+              <p className="text-sm text-[var(--dor-muted)]">
+                {(PATROL_REPORT_KINDS as Record<string, string>)[patrolReportDetail.kind] ??
+                  patrolReportDetail.kind}{" "}
+                · {patrolReportDetail.author.displayName ?? patrolReportDetail.author.nickname}
+              </p>
+              <p className="text-xs text-[var(--dor-muted)]">
+                {new Date(patrolReportDetail.createdAt).toLocaleString("ru-RU")} · статус:{" "}
+                {patrolReportDetail.status}
+              </p>
+              {patrolReportDetail.lat != null && patrolReportDetail.lng != null ? (
+                <p className="text-xs">
+                  📍 {Math.round(patrolReportDetail.lat)}, {Math.round(patrolReportDetail.lng)}
+                </p>
+              ) : null}
+              <div className="rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] p-3 text-sm whitespace-pre-wrap">
+                {patrolReportDetail.note || "—"}
+              </div>
+              <label className="text-xs text-[var(--dor-muted)]">Комментарий диспетчера</label>
+              <textarea
+                className="w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
+                rows={3}
+                value={patrolReviewNote}
+                onChange={(e) => setPatrolReviewNote(e.target.value)}
+                placeholder="При отклонении укажите, что исправить…"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="dor-btn-primary text-sm"
+                  onClick={() => reviewPatrolReport(patrolReportDetail.id, "approve")}
+                >
+                  Принять
+                </button>
+                <button
+                  type="button"
+                  className="dor-btn-secondary text-sm"
+                  onClick={() => reviewPatrolReport(patrolReportDetail.id, "reject")}
+                >
+                  Вернуть на доработку
+                </button>
+                <button
+                  type="button"
+                  className="dor-btn-secondary text-sm"
+                  onClick={() => {
+                    setPatrolReportDetail(null);
+                    setPatrolReviewNote("");
+                  }}
+                >
+                  Закрыть
                 </button>
               </div>
             </div>

@@ -24,6 +24,7 @@ enum TaskKind {
   CONSTRUCTION_SUPPORT
   CONSTRUCTION_SITE
   ADMIN_PAPERWORK
+  ROAD_PATROL
 }
 
 enum EvacuationStatus {
@@ -41,6 +42,8 @@ enum NotificationType {
   DISPATCH
   JOB_APPLICATION
   CIVIC_HELP
+  STAFF_COMPLAINT
+  ROAD_PATROL_REPORT
 }
 
 model User {
@@ -77,6 +80,10 @@ model User {
   vehicleAssignments  VehicleAssignment[]
   disciplinesReceived DisciplineRecord[] @relation("DisciplineTarget")
   disciplinesIssued   DisciplineRecord[] @relation("DisciplineIssuer")
+  patrolAsLeader      PatrolGroup?       @relation("PatrolGroupLeader")
+  patrolAsPartner     PatrolGroup?       @relation("PatrolGroupPartner")
+  roadPatrolReports   RoadPatrolReport[]
+  roadClosures        RoadClosure[]
 }
 
 model VehicleRegistry {
@@ -159,6 +166,8 @@ model DispatchCall {
   body      String
   lat       Float?
   lng       Float?
+  endLat    Float?
+  endLng    Float?
   status    String    @default("OPEN")
   reportText String?
   reportAt   DateTime?
@@ -178,6 +187,8 @@ model PublicAssistanceRequest {
   phone          String
   lat            Float
   lng            Float
+  endLat         Float?
+  endLng         Float?
   status         String        @default("OPEN")
   dispatchCallId String?       @unique
   dispatchCall   DispatchCall? @relation(fields: [dispatchCallId], references: [id], onDelete: SetNull)
@@ -284,4 +295,57 @@ model JobApplication {
   interviewAt       DateTime
   expectedIncome    Int
   createdAt         DateTime @default(now())
+}
+
+/// Пара «дорожный патруль»: старший + напарник (одна машина)
+model PatrolGroup {
+  id         String   @id @default(cuid())
+  leaderId   String   @unique
+  leader     User     @relation("PatrolGroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  partnerId  String?  @unique
+  partner    User?    @relation("PatrolGroupPartner", fields: [partnerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+}
+
+/// Перекрытие / ограничение движения (метка на карте от патруля)
+model RoadClosure {
+  id          String    @id @default(cuid())
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  lat         Float
+  lng         Float
+  title       String
+  description String?
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  closedAt    DateTime?
+}
+
+/// Отчёт дорожного патруля (проверка диспетчером)
+model RoadPatrolReport {
+  id          String    @id @default(cuid())
+  authorId    String
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind        String
+  note        String    @default("")
+  lat         Float?
+  lng         Float?
+  status      String    @default("PENDING")
+  reviewerId  String?
+  reviewedAt  DateTime?
+  reviewNote  String?
+  createdAt   DateTime  @default(now())
+}
+
+/// Жалоба на сотрудника (публичная форма)
+model StaffComplaint {
+  id             String   @id @default(cuid())
+  reporterName   String
+  violatorName   String
+  description    String
+  evidenceUrls   String   @default("[]")
+  phone          String
+  status         String   @default("OPEN")
+  adminNote      String?
+  createdAt      DateTime @default(now())
 }

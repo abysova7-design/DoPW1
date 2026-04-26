@@ -15,14 +15,20 @@ const SanAndreasMap = dynamic(
   },
 );
 
-export function MapClient(props: {
-  onPick?: (lat: number, lng: number) => void;
-  heightClass?: string;
-  initialLat?: number;
-  initialLng?: number;
-  callLat?: number;
-  callLng?: number;
-  callLabel?: string;
-}) {
+export function MapClient(
+  props: {
+    onPick?: (lat: number, lng: number) => void;
+    heightClass?: string;
+    initialLat?: number;
+    initialLng?: number;
+    callLat?: number;
+    callLng?: number;
+    callLabel?: string;
+    dualPick?: boolean;
+    pickSlot?: "A" | "B";
+    pointA?: { lat: number; lng: number } | null;
+    pointB?: { lat: number; lng: number } | null;
+  },
+) {
   return <SanAndreasMap {...props} />;
 }

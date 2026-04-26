@@ -12,8 +12,6 @@ import L from "leaflet";
 
 const SA_MAP = "/sa_map.jpg";
 
-// Реальный размер изображения 6000×6000
-// В CRS.Simple: lat = Y (снизу вверх), lng = X (слева направо)
 const IMG_SIZE = 6000;
 const BOUNDS: L.LatLngBoundsExpression = [
   [0, 0],
@@ -23,13 +21,18 @@ const BOUNDS: L.LatLngBoundsExpression = [
 function InitMap() {
   const map = useMap();
   useEffect(() => {
-    // invalidateSize — сначала чтобы контейнер знал свой размер,
-    // затем fitBounds БЕЗ padding чтобы координаты совпадали с кликом
     map.invalidateSize();
     map.fitBounds(BOUNDS, { animate: false, padding: [0, 0] });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
+}
+
+function clampCoord(lat: number, lng: number): [number, number] {
+  return [
+    Math.max(0, Math.min(IMG_SIZE, lat)),
+    Math.max(0, Math.min(IMG_SIZE, lng)),
+  ];
 }
 
 function ClickMarker({
@@ -71,6 +74,46 @@ function ClickMarker({
   );
 }
 
+function DualClickMarkers({
+  onPick,
+  pointA,
+  pointB,
+  pickSlot,
+}: {
+  onPick: (lat: number, lng: number) => void;
+  pointA: { lat: number; lng: number } | null;
+  pointB: { lat: number; lng: number } | null;
+  pickSlot: "A" | "B";
+}) {
+  useMapEvents({
+    click(e) {
+      onPick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+
+  const iconA = L.divIcon({
+    className: "",
+    html: `<div style="width:18px;height:18px;border-radius:999px;background:#e85d04;border:3px solid #fff;box-shadow:0 0 0 3px rgba(232,93,4,.4);position:relative">
+      <div style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap">А · забрать</div></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+  const iconB = L.divIcon({
+    className: "",
+    html: `<div style="width:18px;height:18px;border-radius:999px;background:#22c55e;border:3px solid #fff;box-shadow:0 0 0 3px rgba(34,197,94,.4);position:relative">
+      <div style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.75);color:#fff;font-size:10px;padding:1px 6px;border-radius:4px;white-space:nowrap">Б · доставить</div></div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+
+  return (
+    <>
+      {pointA ? <Marker position={[pointA.lat, pointA.lng]} icon={iconA} /> : null}
+      {pointB ? <Marker position={[pointB.lat, pointB.lng]} icon={iconB} /> : null}
+    </>
+  );
+}
+
 export function SanAndreasMap({
   onPick,
   heightClass = "h-[340px] md:h-[440px]",
@@ -79,6 +122,10 @@ export function SanAndreasMap({
   callLat,
   callLng,
   callLabel = "Вызов",
+  dualPick = false,
+  pickSlot = "A",
+  pointA = null,
+  pointB = null,
 }: {
   onPick?: (lat: number, lng: number) => void;
   heightClass?: string;
@@ -87,29 +134,39 @@ export function SanAndreasMap({
   callLat?: number;
   callLng?: number;
   callLabel?: string;
+  dualPick?: boolean;
+  pickSlot?: "A" | "B";
+  pointA?: { lat: number; lng: number } | null;
+  pointB?: { lat: number; lng: number } | null;
 }) {
   const [pos, setPos] = useState<[number, number] | null>(
-    initialLat != null && initialLng != null ? [initialLat, initialLng] : null,
+    !dualPick && initialLat != null && initialLng != null ? [initialLat, initialLng] : null,
   );
 
-  // Когда с сервера приходит последняя сохранённая точка — показываем её
   useEffect(() => {
+    if (dualPick) return;
     if (initialLat != null && initialLng != null && pos === null) {
       setPos([initialLat, initialLng]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialLat, initialLng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLat, initialLng, dualPick]);
 
   const handlePick = useCallback(
     (lat: number, lng: number) => {
-      // Зажимаем координаты в пределах карты
-      const clampedLat = Math.max(0, Math.min(IMG_SIZE, lat));
-      const clampedLng = Math.max(0, Math.min(IMG_SIZE, lng));
-      setPos([clampedLat, clampedLng]);
+      const [clampedLat, clampedLng] = clampCoord(lat, lng);
+      if (!dualPick) {
+        setPos([clampedLat, clampedLng]);
+      }
       onPick?.(clampedLat, clampedLng);
     },
-    [onPick],
+    [onPick, dualPick],
   );
+
+  const hint = dualPick
+    ? pickSlot === "A"
+      ? "Клик — точка А (забор груза). Переключите на Б для точки доставки."
+      : "Клик — точка Б (куда доставить)."
+    : "Кликните на карту, чтобы отметить свою точку";
 
   return (
     <div
@@ -129,7 +186,16 @@ export function SanAndreasMap({
       >
         <InitMap />
         <ImageOverlay url={SA_MAP} bounds={BOUNDS} />
-        <ClickMarker onPick={handlePick} pos={pos} />
+        {dualPick ? (
+          <DualClickMarkers
+            onPick={handlePick}
+            pointA={pointA}
+            pointB={pointB}
+            pickSlot={pickSlot}
+          />
+        ) : (
+          <ClickMarker onPick={handlePick} pos={pos} />
+        )}
         {callLat != null && callLng != null && (
           <Marker
             position={[callLat, callLng]}
@@ -163,10 +229,10 @@ export function SanAndreasMap({
           color: "var(--dor-muted)",
         }}
       >
-        Кликните на карту, чтобы отметить свою точку
+        {hint}
       </div>
 
-      {pos && (
+      {!dualPick && pos && (
         <div
           className="pointer-events-none absolute right-2 top-2 rounded-lg font-mono"
           style={{
@@ -179,6 +245,27 @@ export function SanAndreasMap({
           {Math.round(pos[1])}, {Math.round(IMG_SIZE - pos[0])}
         </div>
       )}
+      {dualPick && (pointA || pointB) ? (
+        <div
+          className="pointer-events-none absolute right-2 top-2 max-w-[200px] rounded-lg font-mono text-[10px]"
+          style={{
+            background: "rgba(0,0,0,.7)",
+            padding: "4px 8px",
+            color: "#e5e7eb",
+          }}
+        >
+          {pointA ? (
+            <div>
+              А: {Math.round(pointA.lng)}, {Math.round(IMG_SIZE - pointA.lat)}
+            </div>
+          ) : null}
+          {pointB ? (
+            <div>
+              Б: {Math.round(pointB.lng)}, {Math.round(IMG_SIZE - pointB.lat)}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

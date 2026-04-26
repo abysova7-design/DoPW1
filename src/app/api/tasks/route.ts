@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { TaskKind } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
-import { TASK_KIND_LABELS } from "@/lib/positions";
+import { TASK_KIND_LABELS, canTakeRoadPatrol } from "@/lib/positions";
 
 const KINDS = new Set(Object.keys(TASK_KIND_LABELS));
 
@@ -14,6 +14,13 @@ export async function POST(req: Request) {
   const kind = body?.kind as TaskKind;
   if (!kind || !KINDS.has(kind)) {
     return NextResponse.json({ error: "Неверный тип задачи" }, { status: 400 });
+  }
+
+  if (kind === "ROAD_PATROL" && !canTakeRoadPatrol(user.positionRank, user.isAdmin)) {
+    return NextResponse.json(
+      { error: "Дорожный патруль доступен со 2-го ранга (Engineer I) и выше" },
+      { status: 403 },
+    );
   }
 
   const shift = await prisma.shift.findFirst({

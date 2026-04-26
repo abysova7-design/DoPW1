@@ -5,6 +5,7 @@ import { sessionOptions } from "@/lib/session";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PublicGallery } from "@/components/PublicGallery";
 import { JobSeekerForm } from "@/components/JobSeekerForm";
+import { StaffComplaintForm } from "@/components/StaffComplaintForm";
 
 const DEPARTMENTS = [
   {
@@ -63,6 +64,9 @@ export default async function HomePage() {
               <Link href="/help" className="dor-btn-secondary w-full justify-center sm:w-auto">
                 Помощь
               </Link>
+              <Link href="/#complaint" className="dor-btn-secondary w-full justify-center sm:w-auto">
+                Жалоба на сотрудника
+              </Link>
               <Link href="/#structure" className="dor-btn-primary w-full justify-center sm:w-auto">
                 Структура и задачи
               </Link>
@@ -89,6 +93,20 @@ export default async function HomePage() {
                 <p className="mt-2 text-sm text-[var(--dor-muted)]">{d.text}</p>
               </article>
             ))}
+          </div>
+        </section>
+
+        <section id="complaint" className="mx-auto max-w-6xl px-3 pb-16 sm:px-4 sm:pb-20">
+          <h2 className="text-xl font-bold sm:text-2xl">Жалоба на сотрудника</h2>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--dor-muted)] sm:text-base">
+            Если вы столкнулись с грубостью, злоупотреблением полномочиями или нарушением регламента со
+            стороны сотрудника DOPW, опишите ситуацию ниже. Обращение увидят администрация и
+            диспетчерский центр; ложные доносы могут повлечь ответственность по внутренним правилам штата.
+          </p>
+          <div className="mt-6 w-full rounded-xl border border-red-500/20 bg-gradient-to-br from-[var(--dor-surface)] to-[var(--dor-night)] p-1">
+            <div className="dor-card w-full p-5 md:p-8">
+              <StaffComplaintForm />
+            </div>
           </div>
         </section>
 

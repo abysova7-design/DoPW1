@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "crypto";
-import { NotificationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
 import { publicAssistanceSchemaReady } from "@/lib/public-assistance-schema";
 import { CIVIC_CATEGORY_LABELS, isCivicCategory } from "@/lib/civic-help";
+import { executeCivicAssign } from "@/lib/civic-assign";
 
 const SCHEMA_MSG =
   "База не обновлена: на сервере выполните npx prisma db push && npx prisma generate.";
@@ -67,45 +66,15 @@ export async function PATCH(
     const catLabel = isCivicCategory(civic.category)
       ? CIVIC_CATEGORY_LABELS[civic.category]
       : civic.category;
-    const title = `[Гражданин] ${catLabel}`;
-    const callBody =
-      `Заявитель: ${civic.fullName}\nТелефон: ${civic.phone}\n\n${civic.description}`;
-
-    const callId = randomUUID();
 
     try {
       const result = await prisma.$transaction(async (tx) => {
-        const call = await tx.dispatchCall.create({
-          data: {
-            id: callId,
-            creatorId: user.id,
-            targetId: employeeUserId,
-            title,
-            body: callBody,
-            lat: civic.lat,
-            lng: civic.lng,
-          },
+        return executeCivicAssign(tx, {
+          civic,
+          employeeUserId,
+          creatorUserId: user.id,
+          catLabel,
         });
-
-        await tx.publicAssistanceRequest.update({
-          where: { id },
-          data: {
-            status: "ASSIGNED",
-            assignedUserId: employeeUserId,
-            dispatchCallId: call.id,
-          },
-        });
-
-        await tx.notification.create({
-          data: {
-            userId: employeeUserId,
-            type: NotificationType.DISPATCH,
-            title: `📡 Диспетчер: ${title}`,
-            body: callBody,
-          },
-        });
-
-        return call;
       });
 
       return NextResponse.json({ ok: true, dispatchCallId: result.id });

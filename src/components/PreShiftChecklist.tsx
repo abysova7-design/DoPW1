@@ -1,29 +1,78 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const ITEMS = [
-  { id: "form",      text: "Получил на складе жилет и каску" },
-  { id: "clist",     text: "Включил клист /clist 10" },
-  { id: "vehicle",   text: "Осмотрел закреплённый транспорт (повреждения, топливо)" },
-  { id: "radio",     text: "Объявил в /rr [cID] Машина проверена, готова к работе" },
-  { id: "certs",     text: "Проверил наличие нужных допусков для задач смены" },
-  { id: "regs",      text: "Ознакомлен с регламентом эвакуации и раций" },
+  { id: "form", text: "Получил на складе жилет и каску" },
+  { id: "clist", text: "Включил клист /clist 10" },
+  { id: "vehicle", text: "Осмотрел закреплённый транспорт (повреждения, топливо)" },
+  { id: "radio", text: "Объявил в /rr [cID] Машина проверена, готова к работе" },
+  { id: "certs", text: "Проверил наличие нужных допусков для задач смены" },
+  { id: "regs", text: "Ознакомлен с регламентом эвакуации и раций" },
 ];
 
+function localDateKey(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function loadCheckedForDate(dateKey: string): Record<string, boolean> {
+  const k = `checklist_${dateKey}`;
+  const raw = localStorage.getItem(k);
+  if (raw) {
+    try {
+      return JSON.parse(raw) as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  }
+  try {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const legacy = new Date(y, m - 1, d).toDateString();
+    const oldRaw = localStorage.getItem(`checklist_${legacy}`);
+    if (oldRaw) {
+      localStorage.setItem(k, oldRaw);
+      return JSON.parse(oldRaw) as Record<string, boolean>;
+    }
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
 export function PreShiftChecklist() {
+  const [dateKey, setDateKey] = useState(() => localDateKey());
   const [checked, setChecked] = useState<Record<string, boolean>>({});
-  const [date] = useState(() => new Date().toDateString());
 
   useEffect(() => {
-    const saved = localStorage.getItem(`checklist_${date}`);
-    if (saved) setChecked(JSON.parse(saved) as Record<string, boolean>);
-  }, [date]);
+    setChecked(loadCheckedForDate(dateKey));
+  }, [dateKey]);
+
+  const bumpDateIfMidnightPassed = useCallback(() => {
+    const next = localDateKey();
+    setDateKey((prev) => (next !== prev ? next : prev));
+  }, []);
+
+  useEffect(() => {
+    bumpDateIfMidnightPassed();
+    const id = setInterval(bumpDateIfMidnightPassed, 60_000);
+    function onVis() {
+      if (document.visibilityState === "visible") bumpDateIfMidnightPassed();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [bumpDateIfMidnightPassed]);
 
   function toggle(id: string) {
     setChecked((prev) => {
       const next = { ...prev, [id]: !prev[id] };
-      localStorage.setItem(`checklist_${date}`, JSON.stringify(next));
+      localStorage.setItem(`checklist_${dateKey}`, JSON.stringify(next));
       return next;
     });
   }
@@ -36,9 +85,7 @@ export function PreShiftChecklist() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium text-[var(--dor-muted)]">
-          {done}/{all} выполнено
-        </span>
+        <span className="text-sm font-medium text-[var(--dor-muted)]">{done}/{all} выполнено</span>
         {ready && (
           <span className="rounded-lg bg-[var(--dor-green)]/20 px-2 py-0.5 text-xs font-semibold text-[var(--dor-green-bright)]">
             ✅ Готов к выезду
@@ -65,9 +112,7 @@ export function PreShiftChecklist() {
               />
               <span
                 className={`text-sm ${
-                  checked[item.id]
-                    ? "text-[var(--dor-muted)] line-through"
-                    : "text-[var(--dor-text)]"
+                  checked[item.id] ? "text-[var(--dor-muted)] line-through" : "text-[var(--dor-text)]"
                 }`}
               >
                 {item.text}

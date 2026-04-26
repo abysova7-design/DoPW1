@@ -19,6 +19,18 @@ const DEPARTMENTS = [
   "Лаборатория испытаний, аналитики и поверок в строительстве",
 ];
 
+type StaffComplaintRow = {
+  id: string;
+  reporterName: string;
+  violatorName: string;
+  description: string;
+  evidenceUrls: string;
+  phone: string;
+  status: string;
+  adminNote: string | null;
+  createdAt: string;
+};
+
 type UserRow = {
   id: string;
   nickname: string;
@@ -37,6 +49,7 @@ type UserRow = {
 export default function AdminPage() {
   const router = useRouter();
   const [me, setMe] = useState<{
+    id: string;
     isAdmin: boolean;
     positionRank: PositionRank;
   } | null>(null);
@@ -88,6 +101,12 @@ export default function AdminPage() {
     { id: string; cid: string; vehicleName: string; photoUrl: string | null; assignedAt: string; userId: string }[]
   >([]);
 
+  const [staffComplaints, setStaffComplaints] = useState<StaffComplaintRow[]>([]);
+  const [complaintDrafts, setComplaintDrafts] = useState<
+    Record<string, { status: string; adminNote: string }>
+  >({});
+  const [complaintSavingId, setComplaintSavingId] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     const r = await fetch("/api/auth/me");
     const d = await r.json();
@@ -96,17 +115,34 @@ export default function AdminPage() {
       return;
     }
     setMe(d.user);
-    const [u, v, va] = await Promise.all([
+    const [u, v, va, sc] = await Promise.all([
       fetch("/api/admin/users").then((r) => r.json()),
       fetch("/api/admin/vehicles").then((r) => r.json()),
       fetch("/api/vehicles/assigned?userId=ALL").then((r) =>
         r.ok ? r.json() : { vehicles: [] },
       ),
+      fetch("/api/admin/staff-complaints").then((r) => (r.ok ? r.json() : { complaints: [] })),
     ]);
     setUsers(u.users ?? []);
     setVehicles(v.vehicles ?? []);
     setVaList(va.vehicles ?? []);
+    setStaffComplaints(sc.complaints ?? []);
   }, [router]);
+
+  useEffect(() => {
+    setComplaintDrafts((prev) => {
+      const next = { ...prev };
+      for (const c of staffComplaints) {
+        if (!next[c.id]) {
+          next[c.id] = { status: c.status, adminNote: c.adminNote ?? "" };
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!staffComplaints.some((c) => c.id === id)) delete next[id];
+      }
+      return next;
+    });
+  }, [staffComplaints]);
 
   useEffect(() => {
     refresh();
@@ -202,6 +238,22 @@ export default function AdminPage() {
     refresh();
   }
 
+  async function deleteEditedUser() {
+    if (!editUserId) return;
+    const nick = users.find((u) => u.id === editUserId)?.nickname ?? editUserId;
+    if (!confirm(`Удалить учётную запись «${nick}» безвозвратно? Все связанные данные будут удалены.`)) {
+      return;
+    }
+    const r = await fetch(`/api/admin/users/${editUserId}`, { method: "DELETE" });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      alert(d.error ?? "Ошибка удаления");
+      return;
+    }
+    setEditUserId(null);
+    refresh();
+  }
+
   async function onVaPhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -266,6 +318,24 @@ export default function AdminPage() {
 
   async function removeVehicleAssignment(id: string) {
     await fetch(`/api/vehicles/assigned?id=${id}`, { method: "DELETE" });
+    refresh();
+  }
+
+  async function saveStaffComplaint(id: string) {
+    const draft = complaintDrafts[id];
+    if (!draft) return;
+    setComplaintSavingId(id);
+    const r = await fetch(`/api/admin/staff-complaints/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: draft.status, adminNote: draft.adminNote }),
+    });
+    setComplaintSavingId(null);
+    const d = await safeJson<{ error?: string }>(r, {});
+    if (!r.ok) {
+      alert(d.error ?? "Ошибка");
+      return;
+    }
     refresh();
   }
 
@@ -441,6 +511,109 @@ export default function AdminPage() {
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="dor-card p-6">
+          <h2 className="text-lg font-semibold">📛 Жалобы на сотрудников</h2>
+          <p className="mt-1 text-sm text-[var(--dor-muted)]">
+            Поступают с главной страницы портала. Диспетчеры получают то же уведомление, что и вы.
+          </p>
+          {staffComplaints.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--dor-muted)]">Жалоб пока нет.</p>
+          ) : (
+            <ul className="mt-4 space-y-4">
+              {staffComplaints.map((c) => {
+                const draft = complaintDrafts[c.id] ?? {
+                  status: c.status,
+                  adminNote: c.adminNote ?? "",
+                };
+                let evidence: string[] = [];
+                try {
+                  evidence = JSON.parse(c.evidenceUrls) as string[];
+                  if (!Array.isArray(evidence)) evidence = [];
+                } catch {
+                  evidence = [];
+                }
+                return (
+                  <li
+                    key={c.id}
+                    className="rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)]/60 p-4 text-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-[var(--dor-text)]">
+                          На: {c.violatorName}
+                        </span>
+                        <span className="text-[var(--dor-muted)]"> · от {c.reporterName}</span>
+                      </div>
+                      <span className="text-xs text-[var(--dor-muted)]">
+                        {new Date(c.createdAt).toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-[var(--dor-muted)]">Контакт: {c.phone}</p>
+                    <p className="mt-2 whitespace-pre-wrap text-[var(--dor-text)]">{c.description}</p>
+                    {evidence.length > 0 ? (
+                      <ul className="mt-2 space-y-1 text-xs">
+                        {evidence.map((url) => (
+                          <li key={url}>
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--dor-orange)] underline break-all"
+                            >
+                              {url}
+                            </a>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    <div className="mt-3 grid gap-2 border-t border-[var(--dor-border)] pt-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-[var(--dor-muted)]">Статус</label>
+                        <select
+                          className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2"
+                          value={draft.status}
+                          onChange={(e) =>
+                            setComplaintDrafts((p) => ({
+                              ...p,
+                              [c.id]: { ...draft, status: e.target.value },
+                            }))
+                          }
+                        >
+                          <option value="OPEN">Открыта</option>
+                          <option value="IN_REVIEW">На рассмотрении</option>
+                          <option value="CLOSED">Закрыта</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs text-[var(--dor-muted)]">Внутренняя заметка</label>
+                        <textarea
+                          rows={2}
+                          className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2 text-xs"
+                          value={draft.adminNote}
+                          onChange={(e) =>
+                            setComplaintDrafts((p) => ({
+                              ...p,
+                              [c.id]: { ...draft, adminNote: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-2 dor-btn-secondary text-xs"
+                      disabled={complaintSavingId === c.id}
+                      onClick={() => saveStaffComplaint(c.id)}
+                    >
+                      {complaintSavingId === c.id ? "Сохранение…" : "Сохранить"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section className="dor-card p-6">
@@ -719,7 +892,7 @@ export default function AdminPage() {
                   Доступ к Админке 👑
                 </label>
               </div>
-              <div className="flex gap-2 md:col-span-2">
+              <div className="flex flex-wrap gap-2 md:col-span-2">
                 <button type="submit" className="dor-btn-primary">
                   Сохранить + издать приказ
                 </button>
@@ -729,6 +902,15 @@ export default function AdminPage() {
                   onClick={() => setEditUserId(null)}
                 >
                   Отмена
+                </button>
+                <button
+                  type="button"
+                  className="ml-auto rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                  disabled={!me || editUserId === me.id}
+                  title={me && editUserId === me.id ? "Нельзя удалить свою учётную запись" : undefined}
+                  onClick={deleteEditedUser}
+                >
+                  Удалить учётную запись
                 </button>
               </div>
             </form>
