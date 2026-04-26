@@ -92,7 +92,7 @@ export default function DispatchPage() {
 
   const load = useCallback(async () => {
     const r = await fetch("/api/auth/me", { cache: "no-store" });
-    const d = await r.json();
+    const d = await r.json().catch(() => ({}));
     if (!d.user) { router.replace("/login"); return; }
     if (!d.user.isDispatcher && !d.user.isAdmin) {
       router.replace("/dashboard");
@@ -101,11 +101,11 @@ export default function DispatchPage() {
     setMe(d.user);
 
     const w = await fetch("/api/dispatch/workers", { cache: "no-store" });
-    const wd = await w.json();
+    const wd = await w.json().catch(() => ({}));
     setWorkers(wd.workers ?? []);
 
     const c = await fetch("/api/dispatch", { cache: "no-store" });
-    const cd = await c.json();
+    const cd = await c.json().catch(() => ({}));
     setCalls(cd.calls ?? []);
   }, [router]);
 

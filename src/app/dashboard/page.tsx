@@ -71,12 +71,12 @@ export default function DashboardPage() {
       fetch("/api/shift", { cache: "no-store" }),
       fetch("/api/dispatch", { cache: "no-store" }),
     ]);
-    const dme = await rme.json();
+    const dme = await rme.json().catch(() => ({}));
     if (!dme.user) { router.replace("/login"); return; }
     setMe(dme.user);
-    const ds = await rs.json();
+    const ds = await rs.json().catch(() => ({}));
     setShift(ds.shift);
-    const ddc = await rdc.json();
+    const ddc = await rdc.json().catch(() => ({}));
     const nextCalls = (ddc.calls ?? []).filter(
       (c: DispatchCall) =>
         c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
