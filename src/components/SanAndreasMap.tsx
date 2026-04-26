@@ -76,11 +76,17 @@ export function SanAndreasMap({
   heightClass = "h-[340px] md:h-[440px]",
   initialLat,
   initialLng,
+  callLat,
+  callLng,
+  callLabel = "Вызов",
 }: {
   onPick?: (lat: number, lng: number) => void;
   heightClass?: string;
   initialLat?: number;
   initialLng?: number;
+  callLat?: number;
+  callLng?: number;
+  callLabel?: string;
 }) {
   const [pos, setPos] = useState<[number, number] | null>(
     initialLat != null && initialLng != null ? [initialLat, initialLng] : null,
@@ -124,6 +130,28 @@ export function SanAndreasMap({
         <InitMap />
         <ImageOverlay url={SA_MAP} bounds={BOUNDS} />
         <ClickMarker onPick={handlePick} pos={pos} />
+        {callLat != null && callLng != null && (
+          <Marker
+            position={[callLat, callLng]}
+            icon={L.divIcon({
+              className: "",
+              html: `<div style="
+                width:18px;height:18px;border-radius:999px;
+                background:#dc2626;border:3px solid #fff;
+                box-shadow:0 0 0 3px rgba(220,38,38,.4);
+                position:relative;
+              ">
+                <div style="
+                  position:absolute;top:-22px;left:50%;transform:translateX(-50%);
+                  background:rgba(0,0,0,.75);color:#fff;font-size:10px;
+                  padding:1px 6px;border-radius:4px;white-space:nowrap;
+                ">${callLabel}</div>
+              </div>`,
+              iconSize: [18, 18],
+              iconAnchor: [9, 9],
+            })}
+          />
+        )}
       </MapContainer>
 
       <div

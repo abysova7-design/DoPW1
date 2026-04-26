@@ -86,6 +86,7 @@ export type WorkerMarker = {
 
 export type DispatchMapProps = {
   workers?: WorkerMarker[];
+  callMarkers?: { id: string; lat: number; lng: number; title?: string }[];
   onPick?: (lat: number, lng: number) => void;
   pickedLat?: number | null;
   pickedLng?: number | null;
@@ -94,6 +95,7 @@ export type DispatchMapProps = {
 
 export function DispatchMap({
   workers = [],
+  callMarkers = [],
   onPick,
   pickedLat,
   pickedLng,
@@ -139,6 +141,29 @@ export function DispatchMap({
         {pickedLat != null && pickedLng != null && (
           <Marker position={[pickedLat, pickedLng]} icon={callPin()} />
         )}
+        {callMarkers.map((c) => (
+          <Marker
+            key={c.id}
+            position={[c.lat, c.lng]}
+            icon={L.divIcon({
+              className: "",
+              html: `<div style="position:relative;width:20px;height:20px">
+                <div style="width:20px;height:20px;border-radius:999px;
+                  background:#dc2626;border:3px solid #fff;
+                  box-shadow:0 0 0 3px rgba(220,38,38,.45)"></div>
+                <span style="
+                  position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+                  white-space:nowrap;background:rgba(0,0,0,.8);color:#fff;
+                  font-size:10px;padding:1px 6px;border-radius:4px;pointer-events:none
+                ">вызов</span>
+              </div>`,
+              iconSize: [20, 20],
+              iconAnchor: [10, 10],
+            })}
+          >
+            <Popup>{c.title ?? "Вызов"}</Popup>
+          </Marker>
+        ))}
       </MapContainer>
 
       <div
@@ -151,7 +176,7 @@ export function DispatchMap({
           fontSize: "10px",
           color: "var(--dor-muted)",
         }}>
-          🟠 сотрудники · 🔵 активная эвакуация · 🟢 точка вызова · клик — выбрать координаты
+          🟠 сотрудники · 🔵 активная эвакуация · 🔴 активный вызов · 🟢 новая точка вызова
         </span>
       </div>
     </div>

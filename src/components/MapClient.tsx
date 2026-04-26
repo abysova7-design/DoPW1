@@ -20,6 +20,9 @@ export function MapClient(props: {
   heightClass?: string;
   initialLat?: number;
   initialLng?: number;
+  callLat?: number;
+  callLng?: number;
+  callLabel?: string;
 }) {
   return <SanAndreasMap {...props} />;
 }

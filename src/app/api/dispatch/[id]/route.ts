@@ -42,6 +42,31 @@ export async function PATCH(
     return NextResponse.json({ call: updated });
   }
 
+  if (action === "onsite") {
+    if (
+      call.targetId !== user.id &&
+      !user.isDispatcher &&
+      !user.isAdmin
+    ) {
+      return NextResponse.json({ error: "Нет прав" }, { status: 403 });
+    }
+    const updated = await prisma.dispatchCall.update({
+      where: { id },
+      data: { status: "ONSITE" },
+    });
+    if (typeof call.lat === "number" && typeof call.lng === "number") {
+      await prisma.locationPing.create({
+        data: {
+          userId: user.id,
+          lat: call.lat,
+          lng: call.lng,
+          label: "На месте вызова",
+        },
+      });
+    }
+    return NextResponse.json({ call: updated });
+  }
+
   if (action === "cancel") {
     if (!user.isDispatcher && !user.isAdmin && call.creatorId !== user.id) {
       return NextResponse.json({ error: "Нет прав" }, { status: 403 });

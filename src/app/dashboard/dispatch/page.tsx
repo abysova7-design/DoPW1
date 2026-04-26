@@ -31,6 +31,11 @@ type Worker = {
     status: string;
     plate: string;
   } | null;
+  activeTask: {
+    kind: string;
+    title: string;
+    startedAt: string;
+  } | null;
 };
 
 type Call = {
@@ -48,6 +53,7 @@ type Call = {
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "Открыт",
   ACCEPTED: "Принят",
+  ONSITE: "На месте",
   DONE: "Выполнен",
   CANCELLED: "Отменён",
 };
@@ -55,6 +61,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_COLOR: Record<string, string> = {
   OPEN: "text-[var(--dor-orange)]",
   ACCEPTED: "text-[var(--dor-green-bright)]",
+  ONSITE: "text-blue-400",
   DONE: "text-[var(--dor-muted)]",
   CANCELLED: "text-red-400",
 };
@@ -151,6 +158,9 @@ export default function DispatchPage() {
       };
     });
   const activeEvacuations = workers.filter((w) => w.activeEvacuation);
+  const activeCallMarkers = calls
+    .filter((c) => (c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE") && c.lat != null && c.lng != null)
+    .map((c) => ({ id: c.id, lat: c.lat as number, lng: c.lng as number, title: c.title }));
   const EVAC_STATUS_RU: Record<string, string> = {
     ACTIVE: "Ведется эвакуация",
     DELIVERED: "В пути",
@@ -189,6 +199,7 @@ export default function DispatchPage() {
           <div className="mt-3">
             <DispatchMapClient
               workers={workerMarkers}
+              callMarkers={activeCallMarkers}
               onPick={(a, b) => { setPickedLat(a); setPickedLng(b); }}
               pickedLat={pickedLat}
               pickedLng={pickedLng}
@@ -257,6 +268,11 @@ export default function DispatchPage() {
                           ? ` · чек-ин ${new Date(w.lastPing.createdAt).toLocaleTimeString("ru-RU")}`
                           : " · нет чек-ина"}
                       </div>
+                      {w.activeTask && (
+                        <div className="mt-1 text-xs text-[var(--dor-orange)]">
+                          Задача: {w.activeTask.title}
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -356,7 +372,7 @@ export default function DispatchPage() {
                     )}
                     <span>{new Date(c.createdAt).toLocaleString("ru-RU")}</span>
                   </div>
-                  {c.status === "OPEN" || c.status === "ACCEPTED" ? (
+                  {c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" ? (
                     <div className="mt-2 flex gap-2">
                       <button
                         type="button"

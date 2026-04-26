@@ -38,6 +38,21 @@ export async function GET() {
   const activeEvacMap = Object.fromEntries(
     activeEvacuations.map((e) => [e.userId, e]),
   );
+  const activeTasks = await prisma.workTask.findMany({
+    where: {
+      userId: { in: workerIds },
+      endedAt: null,
+    },
+    select: {
+      userId: true,
+      kind: true,
+      title: true,
+      startedAt: true,
+    },
+  });
+  const activeTaskMap = Object.fromEntries(
+    activeTasks.map((t) => [t.userId, t]),
+  );
   const lastPings = await Promise.all(
     workerIds.map((id) =>
       prisma.locationPing.findFirst({
@@ -57,6 +72,7 @@ export async function GET() {
     user: s.user,
     lastPing: pingMap[s.userId] ?? null,
     activeEvacuation: activeEvacMap[s.userId] ?? null,
+    activeTask: activeTaskMap[s.userId] ?? null,
   }));
 
   return NextResponse.json({ workers });

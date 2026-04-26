@@ -127,6 +127,9 @@ export function PingReminder({
           onPick={(a, b) => { setLat(a); setLng(b); }}
           initialLat={displayLat ?? undefined}
           initialLng={displayLng ?? undefined}
+          callLat={focusLat ?? undefined}
+          callLng={focusLng ?? undefined}
+          callLabel="Вызов"
         />
       </div>
 

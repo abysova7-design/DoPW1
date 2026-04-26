@@ -8,10 +8,10 @@ export async function GET() {
 
   const where =
     user.isDispatcher || user.isAdmin
-      ? { status: { in: ["OPEN", "ACCEPTED"] } }
+      ? { status: { in: ["OPEN", "ACCEPTED", "ONSITE"] } }
       : {
           OR: [
-            { targetId: null, status: { in: ["OPEN", "ACCEPTED"] } },
+            { targetId: null, status: { in: ["OPEN", "ACCEPTED", "ONSITE"] } },
             { targetId: user.id },
           ],
         };

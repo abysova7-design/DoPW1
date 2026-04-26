@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { PingReminder } from "@/components/PingReminder";
@@ -17,6 +17,7 @@ import {
   type PositionRank,
 } from "@/lib/positions";
 import type { TaskKind } from "@prisma/client";
+import { playSound } from "@/lib/sounds";
 
 type Me = {
   id: string;
@@ -58,6 +59,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"main" | "vehicles" | "discipline">("main");
   const [focusCallPoint, setFocusCallPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const pingSectionRef = useRef<HTMLDivElement>(null);
+  const knownCallIdsRef = useRef<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     const [rme, rs, rdc] = await Promise.all([
@@ -71,13 +74,23 @@ export default function DashboardPage() {
     const ds = await rs.json();
     setShift(ds.shift);
     const ddc = await rdc.json();
-    setOpenCalls(
-      (ddc.calls ?? []).filter(
-        (c: DispatchCall) => c.status === "OPEN" || c.status === "ACCEPTED",
-      ),
+    const nextCalls = (ddc.calls ?? []).filter(
+      (c: DispatchCall) =>
+        c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
     );
+    const newForMe = nextCalls.filter((c: DispatchCall) => !knownCallIdsRef.current.has(c.id));
+    if (knownCallIdsRef.current.size > 0 && newForMe.length > 0) {
+      playSound("dispatch");
+    }
+    nextCalls.forEach((c: DispatchCall) => knownCallIdsRef.current.add(c.id));
+    setOpenCalls(nextCalls);
     setLoading(false);
   }, [router]);
+
+  useEffect(() => {
+    if (!focusCallPoint) return;
+    pingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [focusCallPoint]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
@@ -137,13 +150,20 @@ export default function DashboardPage() {
     refresh();
   }
 
-  async function respondCall(call: DispatchCall, action: "accept" | "done") {
-    await fetch(`/api/dispatch/${call.id}`, {
+  async function respondCall(call: DispatchCall, action: "accept" | "onsite" | "done") {
+    const r = await fetch(`/api/dispatch/${call.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
     });
+    if (!r.ok) {
+      return;
+    }
     if (action === "accept" && call.lat != null && call.lng != null) {
+      setFocusCallPoint({ lat: call.lat, lng: call.lng });
+      setTab("main");
+    }
+    if (action === "onsite" && call.lat != null && call.lng != null) {
       setFocusCallPoint({ lat: call.lat, lng: call.lng });
       setTab("main");
     }
@@ -260,6 +280,10 @@ export default function DashboardPage() {
                       onClick={() => respondCall(c, "accept")}>Принять</button>
                   )}
                   {c.status === "ACCEPTED" && (
+                    <button type="button" className="dor-btn-secondary text-xs"
+                      onClick={() => respondCall(c, "onsite")}>На месте</button>
+                  )}
+                  {c.status === "ONSITE" && (
                     <button type="button" className="dor-btn-secondary text-xs"
                       onClick={() => respondCall(c, "done")}>Выполнено</button>
                   )}
@@ -451,10 +475,12 @@ export default function DashboardPage() {
             </section>
 
             {/* Контроль присутствия */}
-            <PingReminder
-              focusLat={focusCallPoint?.lat}
-              focusLng={focusCallPoint?.lng}
-            />
+            <div ref={pingSectionRef}>
+              <PingReminder
+                focusLat={focusCallPoint?.lat}
+                focusLng={focusCallPoint?.lng}
+              />
+            </div>
           </div>
         )}
 
