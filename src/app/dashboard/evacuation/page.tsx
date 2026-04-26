@@ -9,7 +9,14 @@ import { MapClient } from "@/components/MapClient";
 import type { PositionRank } from "@/lib/positions";
 import { compressImage } from "@/lib/compress-image";
 
-type Vehicle = { id: string; plate: string; model: string | null; notes: string | null };
+type Vehicle = {
+  id: string;
+  plate: string;
+  model: string | null;
+  owner: string | null;
+  photoUrl: string | null;
+  notes: string | null;
+};
 type Evacuation = {
   id: string;
   plate: string;
@@ -94,7 +101,7 @@ export default function EvacuationPage() {
         setHits([]);
         return;
       }
-      const r = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}`);
+      const r = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}&take=50`);
       if (!r.ok) return;
       const d = await r.json();
       setHits(d.vehicles ?? []);
@@ -354,12 +361,23 @@ export default function EvacuationPage() {
                 key={v.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--dor-border)] p-3"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="font-mono font-medium">{v.plate}</div>
+                  {v.owner ? (
+                    <div className="text-xs text-[var(--dor-text)]">Владелец: {v.owner}</div>
+                  ) : null}
                   <div className="text-sm text-[var(--dor-muted)]">
                     {[v.model, v.notes].filter(Boolean).join(" · ")}
                   </div>
                 </div>
+                {v.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={v.photoUrl}
+                    alt=""
+                    className="h-12 w-16 shrink-0 rounded border border-[var(--dor-border)] object-cover"
+                  />
+                ) : null}
                 <button
                   type="button"
                   disabled={busy}

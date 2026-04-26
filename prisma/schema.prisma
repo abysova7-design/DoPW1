@@ -82,6 +82,7 @@ model User {
   disciplinesIssued   DisciplineRecord[] @relation("DisciplineIssuer")
   patrolAsLeader      PatrolGroup?       @relation("PatrolGroupLeader")
   patrolAsPartner     PatrolGroup?       @relation("PatrolGroupPartner")
+  patrolCheckpointDuty PatrolCheckpointDuty?
   roadPatrolReports   RoadPatrolReport[]
   roadClosures        RoadClosure[]
 }
@@ -90,6 +91,8 @@ model VehicleRegistry {
   id        String   @id @default(cuid())
   plate     String   @unique
   model     String?
+  owner     String?
+  photoUrl  String?
   notes     String?
   createdAt DateTime @default(now())
 }
@@ -307,6 +310,17 @@ model PatrolGroup {
   createdAt  DateTime @default(now())
 }
 
+/// Заступление на стационарный блок-пост (id поста = PATROL_CHECKPOINTS.id)
+model PatrolCheckpointDuty {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkpointId Int
+  startedAt    DateTime @default(now())
+
+  @@index([checkpointId])
+}
+
 /// Перекрытие / ограничение движения (метка на карте от патруля)
 model RoadClosure {
   id          String    @id @default(cuid())
@@ -323,18 +337,20 @@ model RoadClosure {
 
 /// Отчёт дорожного патруля (проверка диспетчером)
 model RoadPatrolReport {
-  id          String    @id @default(cuid())
-  authorId    String
-  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  kind        String
-  note        String    @default("")
-  lat         Float?
-  lng         Float?
-  status      String    @default("PENDING")
-  reviewerId  String?
-  reviewedAt  DateTime?
-  reviewNote  String?
-  createdAt   DateTime  @default(now())
+  id                String    @id @default(cuid())
+  authorId          String
+  author            User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  kind              String
+  note              String    @default("")
+  citizenNickname   String?
+  photoUrls         String    @default("[]")
+  lat               Float?
+  lng               Float?
+  status            String    @default("PENDING")
+  reviewerId        String?
+  reviewedAt        DateTime?
+  reviewNote        String?
+  createdAt         DateTime  @default(now())
 }
 
 /// Жалоба на сотрудника (публичная форма)

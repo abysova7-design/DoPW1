@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
 import { roadPatrolAccessUserId } from "@/lib/road-patrol-access";
+import { PATROL_CHECKPOINTS } from "@/lib/road-patrol";
 
 /** Карта ситуации для патруля: смены, пинги, эвакуации, активные задачи (как у диспетчера). */
 export async function GET() {
@@ -83,5 +84,17 @@ export async function GET() {
     },
   });
 
-  return NextResponse.json({ workers, closures });
+  const dutyRows =
+    workerIds.length === 0
+      ? []
+      : await prisma.patrolCheckpointDuty.findMany({
+          where: { userId: { in: workerIds } },
+          include: { user: { select: { id: true, nickname: true, displayName: true } } },
+        });
+  const checkpointDuties = PATROL_CHECKPOINTS.map((c) => ({
+    checkpointId: c.id,
+    users: dutyRows.filter((d) => d.checkpointId === c.id).map((d) => d.user),
+  }));
+
+  return NextResponse.json({ workers, closures, checkpointDuties });
 }

@@ -6,6 +6,24 @@ import { addXp } from "@/lib/positions";
 import { roadPatrolAccessUserId } from "@/lib/road-patrol-access";
 import { isPatrolReportKind, ROAD_PATROL_XP_PER_ACTION } from "@/lib/road-patrol";
 
+const MAX_PHOTOS = 5;
+const MAX_DATA_URL_LEN = 850_000;
+
+function parsePhotoUrls(raw: unknown): string[] | null {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) return null;
+  const out: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") return null;
+    const s = item.trim();
+    if (!s.startsWith("data:image/")) return null;
+    if (s.length > MAX_DATA_URL_LEN) return null;
+    out.push(s);
+    if (out.length > MAX_PHOTOS) return null;
+  }
+  return out;
+}
+
 export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Нет доступа" }, { status: 401 });
@@ -46,17 +64,47 @@ export async function POST(req: Request) {
   if (!isPatrolReportKind(kind)) {
     return NextResponse.json({ error: "Некорректный тип отчёта" }, { status: 400 });
   }
-  const note = String(body?.note ?? "").trim().slice(0, 2000);
-  const lat = typeof body?.lat === "number" ? body.lat : undefined;
-  const lng = typeof body?.lng === "number" ? body.lng : undefined;
+
+  const description = String(body?.description ?? "").trim().slice(0, 2000);
+  if (!description) {
+    return NextResponse.json({ error: "Опишите, что сделали (RP)" }, { status: 400 });
+  }
+
+  const lat = typeof body?.lat === "number" ? body.lat : NaN;
+  const lng = typeof body?.lng === "number" ? body.lng : NaN;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return NextResponse.json(
+      { error: "Укажите точку на карте: кнопка «Точка для отчёта», затем клик по карте" },
+      { status: 400 },
+    );
+  }
+
+  const citizenNicknameRaw = typeof body?.citizenNickname === "string" ? body.citizenNickname.trim() : "";
+  const citizenNickname = citizenNicknameRaw ? citizenNicknameRaw.slice(0, 120) : null;
+
+  const photos = parsePhotoUrls(body?.photoUrls);
+  if (photos === null) {
+    return NextResponse.json({ error: "Некорректные вложения фото" }, { status: 400 });
+  }
+
+  let note = description;
+  if (kind === "BLOCKPOST_TEMP") {
+    const tcpLat = typeof body?.tempCheckpoint?.lat === "number" ? body.tempCheckpoint.lat : NaN;
+    const tcpLng = typeof body?.tempCheckpoint?.lng === "number" ? body.tempCheckpoint.lng : NaN;
+    if (Number.isFinite(tcpLat) && Number.isFinite(tcpLng)) {
+      note += `\n\nВременный КП (метка на карте): ${Math.round(tcpLat)}, ${Math.round(tcpLng)}`;
+    }
+  }
 
   const report = await prisma.roadPatrolReport.create({
     data: {
       authorId: user.id,
       kind,
       note,
-      lat: Number.isFinite(lat) ? lat : undefined,
-      lng: Number.isFinite(lng) ? lng : undefined,
+      citizenNickname,
+      photoUrls: JSON.stringify(photos),
+      lat,
+      lng,
       status: "PENDING",
     },
   });
@@ -77,7 +125,7 @@ export async function POST(req: Request) {
         userId: d.id,
         type: NotificationType.ROAD_PATROL_REPORT,
         title: "🛣️ Отчёт дорожного патруля",
-        body: `${user.nickname}: ${kind}${note ? ` — ${note.slice(0, 120)}` : ""}`,
+        body: `${user.nickname}: ${kind}${description ? ` — ${description.slice(0, 120)}` : ""}`,
       })),
     });
   }

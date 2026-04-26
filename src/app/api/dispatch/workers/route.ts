@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
+import { PATROL_CHECKPOINTS } from "@/lib/road-patrol";
 
 export async function GET() {
   const user = await requireUser();
@@ -75,5 +76,17 @@ export async function GET() {
     activeTask: activeTaskMap[s.userId] ?? null,
   }));
 
-  return NextResponse.json({ workers });
+  const dutyRows =
+    workerIds.length === 0
+      ? []
+      : await prisma.patrolCheckpointDuty.findMany({
+          where: { userId: { in: workerIds } },
+          include: { user: { select: { id: true, nickname: true, displayName: true } } },
+        });
+  const checkpointDuties = PATROL_CHECKPOINTS.map((c) => ({
+    checkpointId: c.id,
+    users: dutyRows.filter((d) => d.checkpointId === c.id).map((d) => d.user),
+  }));
+
+  return NextResponse.json({ workers, checkpointDuties });
 }

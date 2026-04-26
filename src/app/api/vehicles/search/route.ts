@@ -12,14 +12,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ vehicles: [] });
   }
 
+  let take = parseInt(searchParams.get("take") ?? "20", 10) || 20;
+  take = Math.min(Math.max(1, take), user.isDispatcher || user.isAdmin ? 100 : 40);
+
   const vehicles = await prisma.vehicleRegistry.findMany({
     where: {
       OR: [
         { plate: { contains: q } },
         { model: { contains: q } },
+        ...(user.isDispatcher || user.isAdmin
+          ? ([{ owner: { contains: q } }] as const)
+          : []),
       ],
     },
-    take: 20,
+    take,
+    orderBy: { createdAt: "desc" },
   });
 
   return NextResponse.json({ vehicles });

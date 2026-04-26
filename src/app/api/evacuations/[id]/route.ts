@@ -35,11 +35,13 @@ export async function PATCH(
     if (!v) {
       return NextResponse.json({ error: "Авто не в базе" }, { status: 400 });
     }
+    const descParts = [v.model, v.owner, v.notes].filter(Boolean);
     const updated = await prisma.evacuation.update({
       where: { id },
       data: {
         plate: v.plate,
-        description: [v.model, v.notes].filter(Boolean).join(" — ") || null,
+        ...(v.owner ? { ownerNickname: v.owner } : {}),
+        description: descParts.length ? descParts.join(" — ") : null,
       },
     });
     return NextResponse.json({ evacuation: updated });

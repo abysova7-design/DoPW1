@@ -5,6 +5,10 @@ export const PATROL_CHECKPOINTS = [
   { id: 3, label: "Блок-пост №3", lat: 286, lng: 1357 },
 ] as const;
 
+export function stationaryCheckpointById(id: number) {
+  return PATROL_CHECKPOINTS.find((c) => c.id === id);
+}
+
 export const ROAD_PATROL_XP_PER_ACTION = 5;
 
 export const PATROL_REPORT_KINDS = {
@@ -22,3 +26,21 @@ export type PatrolReportKind = keyof typeof PATROL_REPORT_KINDS;
 export function isPatrolReportKind(v: string): v is PatrolReportKind {
   return v in PATROL_REPORT_KINDS;
 }
+
+/** Статусы отчёта в БД → подпись в интерфейсе */
+export const PATROL_REPORT_STATUS_RU: Record<string, string> = {
+  PENDING: "На проверке",
+  NEEDS_WORK: "На доработке",
+  APPROVED: "Принят",
+};
+
+/** Подсказки к полю «что сделали (RP)» по типу отчёта */
+export const PATROL_REPORT_KIND_HINTS: Record<PatrolReportKind, string> = {
+  FUEL: "ТС, объём топлива, способ оплаты, что сделали по RP…",
+  REPAIR: "Что неисправно, что отремонтировали / какая техпомощь, итог…",
+  BLOCKPOST_TEMP: "Где стоите, осмотр ТС, нарушения, что зафиксировали… (временный КП отметьте кнопкой на карте)",
+  BLOCKPOST_FIXED: "На каком стационарном КП, что проверили, итог смены на посту…",
+  ASSIST_EVAC: "Кому помогли эвакуации, что делали на месте, координация…",
+  REGISTRY_ENTRY: "Данные внесены через форму «Внесение ТС».",
+  OTHER: "Суть обращения гражданина, что сделали, итог…",
+};

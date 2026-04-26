@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, type ReactElement } from "react";
 import {
   ImageOverlay,
   MapContainer,
@@ -29,11 +29,22 @@ function InitMap() {
   return null;
 }
 
-function checkpointPin(label: string, variant: "fixed" | "temp") {
-  const bg = variant === "temp" ? "#a855f7" : "#f59e0b";
+function escAttr(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function checkpointPin(
+  label: string,
+  variant: "fixed" | "temp",
+  options?: { staffed?: boolean; hoverTitle?: string },
+) {
+  const staffed = Boolean(options?.staffed);
+  const bg = variant === "temp" ? "#a855f7" : staffed ? "#22c55e" : "#f59e0b";
+  const tip = options?.hoverTitle?.trim() ? escAttr(options.hoverTitle.trim()).slice(0, 420) : "";
+  const titleAttr = tip ? ` title="${tip}"` : "";
   return L.divIcon({
     className: "",
-    html: `<div style="position:relative;width:18px;height:18px">
+    html: `<div style="position:relative;width:18px;height:18px"${titleAttr}>
       <div style="width:18px;height:18px;border-radius:4px;transform:rotate(45deg);
         background:${bg};border:2px solid #fff;
         box-shadow:0 0 0 2px rgba(0,0,0,.4)"></div>
@@ -112,6 +123,16 @@ export type CheckpointMarker = {
   lng: number;
   label: string;
   variant?: "fixed" | "temp";
+  /** id стационарного поста из PATROL_CHECKPOINTS (1–3) */
+  stationaryCheckpointId?: number;
+  occupants?: { nickname: string; displayName?: string | null }[];
+};
+
+export type CheckpointMapActions = {
+  myCheckpointId: number | null;
+  busy: boolean;
+  onTake: (checkpointId: number) => void;
+  onLeave: () => void;
 };
 
 export type ClosureMarker = {
@@ -121,6 +142,33 @@ export type ClosureMarker = {
   title: string;
   description?: string | null;
 };
+
+/** Отчёты дорожного патруля с координатами */
+export type PatrolReportMarker = {
+  id: string;
+  lat: number;
+  lng: number;
+  label: string;
+};
+
+function patrolReportPin(label: string) {
+  const safe = label.replace(/</g, "").slice(0, 48);
+  return L.divIcon({
+    className: "",
+    html: `<div style="position:relative;width:20px;height:20px">
+      <div style="width:20px;height:20px;border-radius:999px;
+        background:#0891b2;border:3px solid #fff;
+        box-shadow:0 0 0 3px rgba(8,145,178,.45)"></div>
+      <span style="
+        position:absolute;bottom:22px;left:50%;transform:translateX(-50%);
+        white-space:nowrap;background:rgba(0,0,0,.88);color:#fff;
+        font-size:9px;padding:2px 6px;border-radius:4px;pointer-events:none;max-width:180px;overflow:hidden;text-overflow:ellipsis
+      ">🛣️ ${safe}</span>
+    </div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
 
 function closurePin(title: string) {
   const safe = title.replace(/</g, "").slice(0, 40);
@@ -153,6 +201,9 @@ export type DispatchMapProps = {
   }[];
   checkpointMarkers?: CheckpointMarker[];
   closureMarkers?: ClosureMarker[];
+  patrolReportMarkers?: PatrolReportMarker[];
+  /** Кнопки заступления на стационарный КП (только дорожный патруль) */
+  checkpointActions?: CheckpointMapActions;
   onPick?: (lat: number, lng: number) => void;
   pickedLat?: number | null;
   pickedLng?: number | null;
@@ -164,6 +215,8 @@ export function DispatchMap({
   callMarkers = [],
   checkpointMarkers = [],
   closureMarkers = [],
+  patrolReportMarkers = [],
+  checkpointActions,
   onPick,
   pickedLat,
   pickedLng,
@@ -189,15 +242,65 @@ export function DispatchMap({
         <ImageOverlay url={SA_MAP} bounds={BOUNDS} />
         <ClickLayer onPick={onPick} />
 
-        {checkpointMarkers.map((cp) => (
-          <Marker
-            key={cp.id}
-            position={[cp.lat, cp.lng]}
-            icon={checkpointPin(cp.label, cp.variant ?? "fixed")}
-          >
-            <Popup>{cp.label}</Popup>
-          </Marker>
-        ))}
+        {checkpointMarkers.map((cp) => {
+          const variant = cp.variant ?? "fixed";
+          const occ = cp.occupants ?? [];
+          const staffed = variant === "fixed" && occ.length > 0;
+          const hoverTitle =
+            staffed
+              ? `На посту: ${occ.map((o) => o.displayName ?? o.nickname).join(", ")}`
+              : cp.label;
+          return (
+            <Marker
+              key={cp.id}
+              position={[cp.lat, cp.lng]}
+              icon={checkpointPin(cp.label, variant, {
+                staffed,
+                hoverTitle: variant === "fixed" ? hoverTitle : cp.label,
+              })}
+            >
+              <Popup>
+                <div className="min-w-[168px] space-y-2 text-sm text-[var(--dor-text)]">
+                  <div>
+                    <div className="font-semibold">{cp.label}</div>
+                    {variant === "temp" ? null : occ.length > 0 ? (
+                      <div className="mt-1 text-xs text-[var(--dor-muted)]">
+                        На посту: {occ.map((o) => o.displayName ?? o.nickname).join(", ")}
+                      </div>
+                    ) : (
+                      <div className="mt-1 text-xs text-[var(--dor-muted)]">Пост свободен</div>
+                    )}
+                  </div>
+                  {checkpointActions && cp.stationaryCheckpointId != null ? (
+                    <div className="flex flex-col gap-1 border-t border-[var(--dor-border)] pt-2">
+                      {checkpointActions.myCheckpointId === cp.stationaryCheckpointId ? (
+                        <button
+                          type="button"
+                          className="rounded-lg bg-[var(--dor-surface)] px-2 py-1.5 text-xs font-medium hover:opacity-90"
+                          disabled={checkpointActions.busy}
+                          onClick={() => checkpointActions.onLeave()}
+                        >
+                          Сняться с поста
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded-lg bg-[var(--dor-orange)] px-2 py-1.5 text-xs font-medium text-black hover:opacity-90"
+                          disabled={checkpointActions.busy}
+                          onClick={() => checkpointActions.onTake(cp.stationaryCheckpointId!)}
+                        >
+                          {checkpointActions.myCheckpointId != null
+                            ? "Перейти на этот пост"
+                            : "Заступить на пост"}
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
 
         {workers.map((w) => {
           const color = w.stale
@@ -231,6 +334,15 @@ export function DispatchMap({
         {pickedLat != null && pickedLng != null && (
           <Marker position={[pickedLat, pickedLng]} icon={callPin()} />
         )}
+
+        {patrolReportMarkers.map((pr) => (
+          <Marker key={pr.id} position={[pr.lat, pr.lng]} icon={patrolReportPin(pr.label)}>
+            <Popup>
+              <div style={{ fontWeight: 600, fontSize: "12px" }}>{pr.label}</div>
+            </Popup>
+          </Marker>
+        ))}
+
         {callMarkers.flatMap((c) => {
           const hasEnd =
             c.endLat != null &&
@@ -295,7 +407,7 @@ export function DispatchMap({
                 <Popup>{(c.title ?? "Вызов") + " — точка Б"}</Popup>
               </Marker>
             ) : null;
-          return [line, m1, m2].filter(Boolean) as JSX.Element[];
+          return [line, m1, m2].filter(Boolean) as ReactElement[];
         })}
 
         {closureMarkers.map((cl) => (
@@ -322,7 +434,7 @@ export function DispatchMap({
           fontSize: "10px",
           color: "var(--dor-muted)",
         }}>
-          🟠 сотрудники · 🩷 патруль · 🔵 эвакуация · 🔴/🟢 вызов+маршрут · 🟧 КП · 🟣 вр. КП · ⛔ перекрытие
+          🟠 сотрудники · 🩷 патруль · 🔵 эвакуация · 🟢 точка вызова/отчёта · 🛣️ отчёт патруля · 🔴/🟢 вызов+маршрут · 🟧 КП свободен · 🟩 КП заступили · 🟣 вр. КП · ⛔ перекрытие
         </span>
       </div>
     </div>

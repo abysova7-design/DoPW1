@@ -19,12 +19,20 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const plate = String(body?.plate ?? "").trim().toUpperCase();
   const model = typeof body?.model === "string" ? body.model.trim() : "";
+  const owner = typeof body?.owner === "string" ? body.owner.trim().slice(0, 200) : "";
+  const photoUrl = typeof body?.photoUrl === "string" ? body.photoUrl.trim() : "";
   const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
 
   if (!plate) return NextResponse.json({ error: "Номер обязателен" }, { status: 400 });
 
   const v = await prisma.vehicleRegistry.create({
-    data: { plate, model: model || null, notes: notes || null },
+    data: {
+      plate,
+      model: model || null,
+      owner: owner || null,
+      photoUrl: photoUrl || null,
+      notes: notes || null,
+    },
   });
   return NextResponse.json({ vehicle: v });
 }

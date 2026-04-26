@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DispatchMapClient } from "@/components/DispatchMapClient";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
@@ -11,7 +11,8 @@ import { RANK_LABELS } from "@/lib/positions";
 import { useRadio } from "@/components/RadioProvider";
 import { playSound } from "@/lib/sounds";
 import { CIVIC_CATEGORY_LABELS, isCivicCategory } from "@/lib/civic-help";
-import { PATROL_REPORT_KINDS } from "@/lib/road-patrol";
+import type { CheckpointMarker } from "@/components/DispatchMap";
+import { PATROL_CHECKPOINTS, PATROL_REPORT_KINDS, PATROL_REPORT_STATUS_RU } from "@/lib/road-patrol";
 
 type CivicRequest = {
   id: string;
@@ -67,10 +68,17 @@ type RoadClosureRow = {
   author: { nickname: string; displayName: string | null };
 };
 
+type CheckpointDutyBundle = {
+  checkpointId: number;
+  users: { id: string; nickname: string; displayName: string | null }[];
+};
+
 type RoadPatrolReportRow = {
   id: string;
   kind: string;
   note: string;
+  citizenNickname?: string | null;
+  photoUrls?: string;
   lat: number | null;
   lng: number | null;
   status: string;
@@ -145,6 +153,7 @@ export default function DispatchPage() {
   const [pickedLng, setPickedLng] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [checkpointDuties, setCheckpointDuties] = useState<CheckpointDutyBundle[]>([]);
 
   const load = useCallback(async () => {
     const r = await fetch("/api/auth/me", { cache: "no-store" });
@@ -159,6 +168,7 @@ export default function DispatchPage() {
     const w = await fetch("/api/dispatch/workers", { cache: "no-store" });
     const wd = await w.json().catch(() => ({}));
     setWorkers(wd.workers ?? []);
+    setCheckpointDuties(wd.checkpointDuties ?? []);
 
     const c = await fetch("/api/dispatch", { cache: "no-store" });
     const cd = await c.json().catch(() => ({}));
@@ -190,7 +200,7 @@ export default function DispatchPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const t = setInterval(load, 5000);
+    const t = setInterval(load, 15000);
     return () => clearInterval(t);
   }, [load]);
   useEffect(() => {
@@ -339,6 +349,35 @@ export default function DispatchPage() {
     title: c.title,
     description: c.description,
   }));
+  const patrolReportMapMarkers = patrolReports
+    .filter(
+      (r) =>
+        r.lat != null &&
+        r.lng != null &&
+        Number.isFinite(r.lat) &&
+        Number.isFinite(r.lng),
+    )
+    .map((r) => ({
+      id: r.id,
+      lat: r.lat as number,
+      lng: r.lng as number,
+      label: `${(PATROL_REPORT_KINDS as Record<string, string>)[r.kind] ?? r.kind} · ${r.author.displayName ?? r.author.nickname}`,
+    }));
+
+  const dispatchCheckpointMarkers: CheckpointMarker[] = PATROL_CHECKPOINTS.map((c) => ({
+    id: `cp-${c.id}`,
+    lat: c.lat,
+    lng: c.lng,
+    label: c.label,
+    variant: "fixed" as const,
+    stationaryCheckpointId: c.id,
+    occupants:
+      checkpointDuties.find((d) => d.checkpointId === c.id)?.users.map((u) => ({
+        nickname: u.nickname,
+        displayName: u.displayName,
+      })) ?? [],
+  }));
+
   const EVAC_STATUS_RU: Record<string, string> = {
     ACTIVE: "Ведется эвакуация",
     DELIVERED: "В пути",
@@ -374,15 +413,18 @@ export default function DispatchPage() {
         <section className="dor-card p-5">
           <h2 className="font-semibold">Карта — расположение сотрудников</h2>
           <p className="mt-1 text-xs text-[var(--dor-muted)]">
-            Оранжевые точки — сотрудники с активной сменой (данные с последнего чек-ина).
-            ⛔ — перекрытия от патруля. Красный/зелёный вызов с линией — маршрут (А→Б).
-            Кликните по карте, чтобы отметить точку вызова.
+            Оранжевые точки — сотрудники с активной сменой (данные с последнего чек-ина). Ромбы КП: оранжевый — пост
+            свободен, зелёный — на посту заступили (наведите на маркер — имена). ⛔ — перекрытия от патруля; бирюзовые
+            🛣️ — отчёты патруля с координатами. Красный/зелёный вызов с линией — маршрут (А→Б). Кликните по карте,
+            чтобы отметить точку вызова.
           </p>
           <div className="mt-3">
             <DispatchMapClient
               workers={workerMarkers}
+              checkpointMarkers={dispatchCheckpointMarkers}
               callMarkers={activeCallMarkers}
               closureMarkers={closureMapMarkers}
+              patrolReportMarkers={patrolReportMapMarkers}
               onPick={(a, b) => { setPickedLat(a); setPickedLng(b); }}
               pickedLat={pickedLat}
               pickedLng={pickedLng}
@@ -693,7 +735,8 @@ export default function DispatchPage() {
                         {r.author.displayName ?? r.author.nickname}
                       </div>
                       <div className="text-xs text-[var(--dor-muted)]">
-                        {new Date(r.createdAt).toLocaleString("ru-RU")} · {r.status}
+                        {new Date(r.createdAt).toLocaleString("ru-RU")} ·{" "}
+                        {PATROL_REPORT_STATUS_RU[r.status] ?? r.status}
                       </div>
                       {r.note ? (
                         <p className="mt-1 line-clamp-2 text-xs text-[var(--dor-muted)]">{r.note}</p>
@@ -730,16 +773,47 @@ export default function DispatchPage() {
               </p>
               <p className="text-xs text-[var(--dor-muted)]">
                 {new Date(patrolReportDetail.createdAt).toLocaleString("ru-RU")} · статус:{" "}
-                {patrolReportDetail.status}
+                {PATROL_REPORT_STATUS_RU[patrolReportDetail.status] ?? patrolReportDetail.status}
               </p>
               {patrolReportDetail.lat != null && patrolReportDetail.lng != null ? (
                 <p className="text-xs">
                   📍 {Math.round(patrolReportDetail.lat)}, {Math.round(patrolReportDetail.lng)}
                 </p>
               ) : null}
+              {patrolReportDetail.citizenNickname ? (
+                <p className="text-sm">
+                  <span className="text-[var(--dor-muted)]">Гражданин (RP): </span>
+                  {patrolReportDetail.citizenNickname}
+                </p>
+              ) : null}
               <div className="rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] p-3 text-sm whitespace-pre-wrap">
                 {patrolReportDetail.note || "—"}
               </div>
+              {(() => {
+                let urls: string[] = [];
+                try {
+                  urls = JSON.parse(patrolReportDetail.photoUrls ?? "[]") as string[];
+                } catch {
+                  urls = [];
+                }
+                if (!urls.length) return null;
+                return (
+                  <div>
+                    <p className="mb-2 text-xs text-[var(--dor-muted)]">Вложения</p>
+                    <div className="flex flex-wrap gap-2">
+                      {urls.map((u, i) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={i}
+                          src={u}
+                          alt=""
+                          className="h-24 max-w-[140px] rounded-lg border border-[var(--dor-border)] object-cover"
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
               <label className="text-xs text-[var(--dor-muted)]">Комментарий диспетчера</label>
               <textarea
                 className="w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
@@ -851,6 +925,7 @@ export default function DispatchPage() {
 
         {/* ── База эвакуаций ── */}
         <EvacDatabase />
+        <VehicleRegistryPanel />
       </main>
     </div>
   );
@@ -1016,6 +1091,134 @@ function EvacDatabase() {
           onClose={() => setLightbox(null)}
         />
       )}
+    </section>
+  );
+}
+
+type RegVehicleRow = {
+  id: string;
+  plate: string;
+  model: string | null;
+  owner: string | null;
+  photoUrl: string | null;
+  notes: string | null;
+  createdAt: string;
+};
+
+function VehicleRegistryPanel() {
+  const [rows, setRows] = useState<RegVehicleRow[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [lightbox, setLightbox] = useState<{ photos: string[]; idx: number } | null>(null);
+  const rowsRef = useRef<RegVehicleRow[]>([]);
+  useLayoutEffect(() => {
+    rowsRef.current = rows;
+  }, [rows]);
+
+  async function fetchRegistry(reset: boolean) {
+    setLoading(true);
+    const skip = reset ? 0 : rowsRef.current.length;
+    const r = await fetch(`/api/vehicles/registry?skip=${skip}&take=20`, { cache: "no-store" });
+    setLoading(false);
+    if (!r.ok) return;
+    const d = await r.json().catch(() => ({}));
+    const next: RegVehicleRow[] = d.vehicles ?? [];
+    setHasMore(Boolean(d.hasMore));
+    if (reset) setRows(next);
+    else setRows((prev) => [...prev, ...next]);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      const r = await fetch(`/api/vehicles/registry?skip=0&take=20`, { cache: "no-store" });
+      setLoading(false);
+      if (!r.ok || cancelled) return;
+      const d = await r.json().catch(() => ({}));
+      if (cancelled) return;
+      setRows(d.vehicles ?? []);
+      setHasMore(Boolean(d.hasMore));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <section className="dor-card p-5">
+      <h2 className="font-semibold">🚗 Реестр ТС</h2>
+      <p className="mt-1 text-sm text-[var(--dor-muted)]">
+        Все записи из базы (патруль и админка). По 20 строк; при необходимости подгружайте дальше.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="dor-btn-secondary text-xs"
+          disabled={loading}
+          onClick={() => fetchRegistry(true)}
+        >
+          Обновить с начала
+        </button>
+      </div>
+      {rows.length === 0 && !loading ? (
+        <p className="mt-3 text-sm text-[var(--dor-muted)]">Записей нет или ещё не загружено.</p>
+      ) : (
+        <ul className="mt-3 max-h-[min(70vh,520px)] space-y-2 overflow-y-auto text-sm">
+          {rows.map((v) => (
+            <li
+              key={v.id}
+              className="rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)]/50 p-3"
+            >
+              <div className="flex flex-wrap items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono font-semibold text-[var(--dor-orange)]">{v.plate}</div>
+                  {v.model ? <div className="text-xs text-[var(--dor-muted)]">{v.model}</div> : null}
+                  {v.owner ? (
+                    <div className="mt-1 text-xs text-[var(--dor-text)]">Владелец: {v.owner}</div>
+                  ) : null}
+                  {v.notes ? (
+                    <div className="mt-1 text-[11px] text-[var(--dor-muted)]">{v.notes}</div>
+                  ) : null}
+                  <div className="mt-1 text-[10px] text-[var(--dor-muted)]">
+                    {new Date(v.createdAt).toLocaleString("ru-RU")}
+                  </div>
+                </div>
+                {v.photoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={v.photoUrl}
+                    alt=""
+                    className="h-16 w-24 shrink-0 cursor-zoom-in rounded-lg border border-[var(--dor-border)] object-cover"
+                    onClick={() => setLightbox({ photos: [v.photoUrl!], idx: 0 })}
+                  />
+                ) : (
+                  <span className="text-[10px] text-[var(--dor-muted)]">нет фото</span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {hasMore ? (
+        <button
+          type="button"
+          className="mt-3 dor-btn-secondary text-xs disabled:opacity-50"
+          disabled={loading}
+          onClick={() => fetchRegistry(false)}
+        >
+          {loading ? "Загрузка…" : "Показать ещё 20"}
+        </button>
+      ) : rows.length > 0 ? (
+        <p className="mt-2 text-xs text-[var(--dor-muted)]">Все записи загружены.</p>
+      ) : null}
+      {lightbox ? (
+        <PhotoLightbox
+          photos={lightbox.photos}
+          startIndex={lightbox.idx}
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
     </section>
   );
 }

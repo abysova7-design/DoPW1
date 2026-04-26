@@ -55,7 +55,7 @@ export default function AdminPage() {
   } | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [vehicles, setVehicles] = useState<
-    { id: string; plate: string; model: string | null; notes: string | null }[]
+    { id: string; plate: string; model: string | null; owner: string | null; notes: string | null }[]
   >([]);
 
   const [newNick, setNewNick] = useState("");
@@ -655,6 +655,7 @@ export default function AdminPage() {
               <li key={v.id} className="flex justify-between gap-2 font-mono">
                 <span>
                   {v.plate} {v.model ? `· ${v.model}` : ""}
+                  {v.owner ? ` · ${v.owner}` : ""}
                 </span>
               </li>
             ))}

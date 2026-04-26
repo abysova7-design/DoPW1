@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
+import { compressImage } from "@/lib/compress-image";
 import { DispatchMapClient } from "@/components/DispatchMapClient";
 import type { PositionRank } from "@/lib/positions";
 import {
   PATROL_CHECKPOINTS,
   PATROL_REPORT_KINDS,
+  PATROL_REPORT_KIND_HINTS,
+  PATROL_REPORT_STATUS_RU,
   type PatrolReportKind,
 } from "@/lib/road-patrol";
 import type { WorkerMarker, CheckpointMarker } from "@/components/DispatchMap";
@@ -42,6 +45,11 @@ type RoadClosureRow = {
   author: { nickname: string; displayName: string | null };
 };
 
+type CheckpointDutyBundle = {
+  checkpointId: number;
+  users: { id: string; nickname: string; displayName: string | null }[];
+};
+
 export default function RoadPatrolPage() {
   const router = useRouter();
   const [me, setMe] = useState<Me | null>(null);
@@ -65,15 +73,36 @@ export default function RoadPatrolPage() {
     asPartner: { leader: { id: string; nickname: string } } | null;
   } | null>(null);
   const [myReports, setMyReports] = useState<
-    { id: string; kind: string; note: string; status: string; createdAt: string }[]
+    {
+      id: string;
+      kind: string;
+      note: string;
+      status: string;
+      createdAt: string;
+      lat: number | null;
+      lng: number | null;
+      citizenNickname?: string | null;
+      photoUrls?: string;
+    }[]
   >([]);
+  const [reportModalKind, setReportModalKind] = useState<PatrolReportKind | null>(null);
+  const [reportDescription, setReportDescription] = useState("");
+  const [reportCitizen, setReportCitizen] = useState("");
+  const [reportPhotos, setReportPhotos] = useState<string[]>([]);
+  const [reportBusy, setReportBusy] = useState(false);
+  const reportFileRef = useRef<HTMLInputElement>(null);
   const [plateSearch, setPlateSearch] = useState("");
   const [searchHits, setSearchHits] = useState<{ plate: string; model: string | null }[]>([]);
   const [registryOpen, setRegistryOpen] = useState(false);
   const [regPlate, setRegPlate] = useState("");
   const [regModel, setRegModel] = useState("");
+  const [regOwner, setRegOwner] = useState("");
   const [regNotes, setRegNotes] = useState("");
+  const [regPhoto, setRegPhoto] = useState<string | null>(null);
   const [regBusy, setRegBusy] = useState(false);
+  const regFileRef = useRef<HTMLInputElement>(null);
+  const [checkpointDuties, setCheckpointDuties] = useState<CheckpointDutyBundle[]>([]);
+  const [cpDutyBusy, setCpDutyBusy] = useState(false);
 
   const load = useCallback(async () => {
     const rme = await fetch("/api/auth/me", { cache: "no-store" });
@@ -89,11 +118,13 @@ export default function RoadPatrolPage() {
       setMsg("Нет активной задачи «Дорожный патруль». Вернитесь в кабинет и выберите задачу.");
       setWorkers([]);
       setClosures([]);
+      setCheckpointDuties([]);
       return;
     }
     const sd = await rs.json().catch(() => ({}));
     setWorkers(sd.workers ?? []);
     setClosures(sd.closures ?? []);
+    setCheckpointDuties(sd.checkpointDuties ?? []);
     setMsg(null);
 
     const rg = await fetch("/api/road-patrol/group", { cache: "no-store" });
@@ -132,28 +163,77 @@ export default function RoadPatrolPage() {
     setSearchHits(d.vehicles ?? []);
   }
 
-  async function sendReport(kind: PatrolReportKind) {
-    const lat = reportPick?.lat ?? tempCp?.lat;
-    const lng = reportPick?.lng ?? tempCp?.lng;
+  function openReportModal(kind: PatrolReportKind) {
+    setReportModalKind(kind);
+    setReportDescription("");
+    setReportCitizen("");
+    setReportPhotos([]);
+    if (reportFileRef.current) reportFileRef.current.value = "";
+    setMsg(null);
+  }
+
+  async function onReportPhotosChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files?.length) return;
+    const next: string[] = [...reportPhotos];
+    for (let i = 0; i < files.length && next.length < 5; i++) {
+      const f = files[i];
+      try {
+        const dataUrl = await compressImage(f, 1200, 900, 0.82);
+        if (dataUrl.length > 850_000) {
+          setMsg("Одно из фото слишком большое — выберите другие или меньше файлов.");
+          return;
+        }
+        next.push(dataUrl);
+      } catch {
+        setMsg("Не удалось обработать фото.");
+        return;
+      }
+    }
+    setReportPhotos(next);
+    setMsg(null);
+  }
+
+  async function submitReportModal() {
+    if (!reportModalKind) return;
+    if (!reportPick) {
+      setMsg("Сначала укажите точку на карте: «Точка для отчёта», затем клик по карте.");
+      return;
+    }
+    const description = reportDescription.trim();
+    if (!description) {
+      setMsg("Заполните описание: что сделали (RP).");
+      return;
+    }
+    setReportBusy(true);
+    const payload: Record<string, unknown> = {
+      kind: reportModalKind,
+      lat: reportPick.lat,
+      lng: reportPick.lng,
+      description,
+      citizenNickname: reportCitizen.trim() || undefined,
+      photoUrls: reportPhotos,
+    };
+    if (reportModalKind === "BLOCKPOST_TEMP" && tempCp) {
+      payload.tempCheckpoint = { lat: tempCp.lat, lng: tempCp.lng };
+    }
     const r = await fetch("/api/road-patrol/reports", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        kind,
-        note:
-          kind === "BLOCKPOST_TEMP" && tempCp
-            ? `Временный КП: ${Math.round(tempCp.lat)}, ${Math.round(tempCp.lng)}`
-            : "",
-        lat: lat ?? undefined,
-        lng: lng ?? undefined,
-      }),
+      body: JSON.stringify(payload),
     });
     const d = await r.json().catch(() => ({}));
+    setReportBusy(false);
     if (!r.ok) {
       setMsg(d.error ?? "Ошибка отчёта");
       return;
     }
     setMsg(`Отчёт отправлен диспетчеру. +${d.xpGained ?? 5} XP`);
+    setReportModalKind(null);
+    setReportDescription("");
+    setReportCitizen("");
+    setReportPhotos([]);
+    if (reportFileRef.current) reportFileRef.current.value = "";
     setReportPick(null);
     setPickMode(null);
     load();
@@ -178,6 +258,36 @@ export default function RoadPatrolPage() {
   async function dissolvePair() {
     await fetch("/api/road-patrol/group", { method: "DELETE" });
     setMsg("Пара расформирована (напарник снят с задачи).");
+    load();
+  }
+
+  async function takeCheckpointDuty(checkpointId: number) {
+    setCpDutyBusy(true);
+    const r = await fetch("/api/road-patrol/checkpoint-duty", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ checkpointId }),
+    });
+    const d = await r.json().catch(() => ({}));
+    setCpDutyBusy(false);
+    if (!r.ok) {
+      setMsg(d.error ?? "Не удалось заступить на пост");
+      return;
+    }
+    setMsg("Вы заступили на блок-пост (метка на карте станет зелёной у диспетчера).");
+    load();
+  }
+
+  async function leaveCheckpointDuty() {
+    setCpDutyBusy(true);
+    const r = await fetch("/api/road-patrol/checkpoint-duty", { method: "DELETE" });
+    const d = await r.json().catch(() => ({}));
+    setCpDutyBusy(false);
+    if (!r.ok) {
+      setMsg(d.error ?? "Не удалось сняться с поста");
+      return;
+    }
+    setMsg("Вы снялись с блок-поста.");
     load();
   }
 
@@ -227,12 +337,36 @@ export default function RoadPatrolPage() {
     load();
   }
 
+  async function onRegistryPhoto(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    try {
+      const dataUrl = await compressImage(f, 1200, 900, 0.82);
+      if (dataUrl.length > 850_000) {
+        setMsg("Фото слишком большое после сжатия — выберите другое.");
+        setRegPhoto(null);
+        return;
+      }
+      setRegPhoto(dataUrl);
+      setMsg(null);
+    } catch {
+      setMsg("Не удалось обработать фото.");
+      setRegPhoto(null);
+    }
+  }
+
   async function submitRegistry() {
     setRegBusy(true);
     const r = await fetch("/api/road-patrol/registry", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plate: regPlate, model: regModel, notes: regNotes }),
+      body: JSON.stringify({
+        plate: regPlate,
+        model: regModel,
+        owner: regOwner,
+        notes: regNotes,
+        photoUrl: regPhoto,
+      }),
     });
     setRegBusy(false);
     const d = await r.json().catch(() => ({}));
@@ -243,8 +377,12 @@ export default function RoadPatrolPage() {
     setRegistryOpen(false);
     setRegPlate("");
     setRegModel("");
+    setRegOwner("");
     setRegNotes("");
-    setMsg(`ТС внесено в базу. +${d.xpGained ?? 5} XP`);
+    setRegPhoto(null);
+    if (regFileRef.current) regFileRef.current.value = "";
+    setMsg(`ТС внесено в базу, отчёт диспетчеру создан. +${d.xpGained ?? 5} XP`);
+    load();
   }
 
   if (!me) {
@@ -279,6 +417,27 @@ export default function RoadPatrolPage() {
     description: c.description,
   }));
 
+  const patrolReportMapMarkers = myReports
+    .filter(
+      (r) =>
+        r.lat != null &&
+        r.lng != null &&
+        Number.isFinite(r.lat) &&
+        Number.isFinite(r.lng),
+    )
+    .map((r) => ({
+      id: r.id,
+      lat: r.lat as number,
+      lng: r.lng as number,
+      label: (PATROL_REPORT_KINDS as Record<string, string>)[r.kind] ?? r.kind,
+    }));
+
+  const occupantsAt = (checkpointId: number) =>
+    checkpointDuties.find((d) => d.checkpointId === checkpointId)?.users ?? [];
+
+  const myStationaryCheckpointId =
+    checkpointDuties.find((d) => d.users.some((u) => u.id === me.id))?.checkpointId ?? null;
+
   const checkpoints: CheckpointMarker[] = [
     ...PATROL_CHECKPOINTS.map((c) => ({
       id: `cp-${c.id}`,
@@ -286,6 +445,8 @@ export default function RoadPatrolPage() {
       lng: c.lng,
       label: c.label,
       variant: "fixed" as const,
+      stationaryCheckpointId: c.id,
+      occupants: occupantsAt(c.id),
     })),
     ...(tempCp
       ? [
@@ -333,9 +494,10 @@ export default function RoadPatrolPage() {
                 вносите данные в базу портала.
               </p>
               <p>
-                На карте отмечены <strong>стационарные блок-посты</strong> для осмотра ТС. Вы можете создать{" "}
-                <strong>временный блок-пост</strong> в любой точке (режим ниже). Метки <strong>⛔ перекрытия</strong>{" "}
-                видны диспетчеру и коллегам на карте.
+                На карте отмечены <strong>стационарные блок-посты</strong> (оранжевые — свободны, зелёные — на посту
+                кто-то заступил; наведите на маркер — подсказка с именами). Откройте маркер и нажмите{" "}
+                <strong>«Заступить на пост»</strong>. Вы можете создать <strong>временный блок-пост</strong> в любой
+                точке (режим ниже). Метки <strong>⛔ перекрытия</strong> видны диспетчеру и коллегам на карте.
               </p>
               <ul className="list-inside list-disc space-y-1">
                 {PATROL_CHECKPOINTS.map((c) => (
@@ -345,8 +507,9 @@ export default function RoadPatrolPage() {
                 ))}
               </ul>
               <p>
-                Синие метки — коллеги на эвакуации; розовые — дорожный патруль; ⛔ — перекрытия. Отчёты диспетчеру и
-                новые перекрытия дают +5 XP за действие.
+                Синие метки — коллеги на эвакуации; розовые — дорожный патруль; бирюзовые 🛣️ — ваши отчёты с
+                координатами; зелёная круглая точка — выбранная «точка для отчёта»; 🟩 ромбы КП — заступление на
+                стационарный пост; ⛔ — перекрытия. Отчёты диспетчеру и новые перекрытия дают +5 XP за действие.
               </p>
             </div>
           ) : null}
@@ -413,6 +576,15 @@ export default function RoadPatrolPage() {
                   workers={markers}
                   checkpointMarkers={checkpoints}
                   closureMarkers={closureMapMarkers}
+                  patrolReportMarkers={patrolReportMapMarkers}
+                  checkpointActions={{
+                    myCheckpointId: myStationaryCheckpointId,
+                    busy: cpDutyBusy,
+                    onTake: takeCheckpointDuty,
+                    onLeave: leaveCheckpointDuty,
+                  }}
+                  pickedLat={reportPick?.lat ?? null}
+                  pickedLng={reportPick?.lng ?? null}
                   onPick={(lat, lng) => {
                     if (pickMode === "temp") {
                       setTempCp({ lat, lng });
@@ -544,8 +716,8 @@ export default function RoadPatrolPage() {
               <h3 className="text-sm font-semibold">Отчёт диспетчеру (+5 XP)</h3>
               <p className="mt-1 text-[10px] text-[var(--dor-muted)]">
                 {reportPick
-                  ? `Точка: ${Math.round(reportPick.lat)}, ${Math.round(reportPick.lng)}`
-                  : "Точку можно задать кнопкой «Точка для отчёта»."}
+                  ? `Точка отчёта: ${Math.round(reportPick.lat)}, ${Math.round(reportPick.lng)} (без неё отправить нельзя).`
+                  : "Сначала «Точка для отчёта» и клик по карте — затем выберите тип и заполните форму."}
               </p>
               <div className="mt-2 flex flex-col gap-1.5">
                 {(
@@ -555,7 +727,7 @@ export default function RoadPatrolPage() {
                     key={k}
                     type="button"
                     className="rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2 text-left text-xs hover:border-[var(--dor-orange)]"
-                    onClick={() => sendReport(k)}
+                    onClick={() => openReportModal(k)}
                   >
                     {PATROL_REPORT_KINDS[k]}
                   </button>
@@ -570,8 +742,8 @@ export default function RoadPatrolPage() {
           <ul className="mt-2 space-y-1 text-xs text-[var(--dor-muted)]">
             {myReports.slice(0, 12).map((r) => (
               <li key={r.id}>
-                {(PATROL_REPORT_KINDS as Record<string, string>)[r.kind] ?? r.kind} · {r.status} ·{" "}
-                {new Date(r.createdAt).toLocaleString("ru-RU")}
+                {(PATROL_REPORT_KINDS as Record<string, string>)[r.kind] ?? r.kind} ·{" "}
+                {PATROL_REPORT_STATUS_RU[r.status] ?? r.status} · {new Date(r.createdAt).toLocaleString("ru-RU")}
               </li>
             ))}
           </ul>
@@ -579,6 +751,93 @@ export default function RoadPatrolPage() {
 
         {msg ? <p className="text-center text-sm text-[var(--dor-orange)]">{msg}</p> : null}
       </main>
+
+      {reportModalKind ? (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+          <div className="dor-card max-h-[90vh] w-full max-w-lg space-y-3 overflow-y-auto p-5">
+            <h3 className="font-semibold">{PATROL_REPORT_KINDS[reportModalKind]}</h3>
+            <p className="text-xs text-[var(--dor-muted)]">
+              {reportPick
+                ? `Точка на карте: ${Math.round(reportPick.lat)}, ${Math.round(reportPick.lng)}.`
+                : (
+                    <span className="text-amber-400">
+                      Нет точки на карте — нажмите «Точка для отчёта» и кликните по карте.
+                    </span>
+                  )}
+            </p>
+            <p className="text-[11px] text-[var(--dor-muted)]">{PATROL_REPORT_KIND_HINTS[reportModalKind]}</p>
+            <label className="text-xs text-[var(--dor-muted)]">Что сделали (RP) — обязательно</label>
+            <textarea
+              className="w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
+              rows={5}
+              value={reportDescription}
+              onChange={(e) => setReportDescription(e.target.value)}
+              placeholder="Опишите действия от первого лица RP…"
+            />
+            <div>
+              <label className="text-xs text-[var(--dor-muted)]">Ник в RP кому оказана помощь (если применимо)</label>
+              <input
+                className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
+                value={reportCitizen}
+                onChange={(e) => setReportCitizen(e.target.value)}
+                placeholder="Например: Иван_Иванов"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-[var(--dor-muted)]">Фото (необязательно, до 5)</label>
+              <input
+                ref={reportFileRef}
+                type="file"
+                accept="image/*"
+                multiple
+                className="mt-1 block w-full text-xs text-[var(--dor-muted)]"
+                onChange={onReportPhotosChange}
+              />
+              {reportPhotos.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {reportPhotos.map((url, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={i}
+                      src={url}
+                      alt=""
+                      className="h-16 w-20 rounded border border-[var(--dor-border)] object-cover"
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                className="dor-btn-primary flex-1 text-sm"
+                disabled={
+                  reportBusy ||
+                  !reportPick ||
+                  !reportDescription.trim()
+                }
+                onClick={submitReportModal}
+              >
+                Отправить диспетчеру
+              </button>
+              <button
+                type="button"
+                className="dor-btn-secondary text-sm"
+                disabled={reportBusy}
+                onClick={() => {
+                  setReportModalKind(null);
+                  setReportDescription("");
+                  setReportCitizen("");
+                  setReportPhotos([]);
+                  if (reportFileRef.current) reportFileRef.current.value = "";
+                }}
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {closureModal ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
@@ -630,8 +889,8 @@ export default function RoadPatrolPage() {
           <div className="dor-card w-full max-w-md space-y-3 p-5">
             <h3 className="font-semibold">Внесение ТС (патруль)</h3>
             <p className="text-xs text-[var(--dor-muted)]">
-              Не эвакуация — запись в реестр. После сохранения начисляется XP и создаётся отчёт «Внесение в
-              базу».
+              Не эвакуация — запись в реестр. Нужны номер, владелец и фото ТС. После сохранения начисляется XP и
+              создаётся отчёт «Внесение в базу» для диспетчера.
             </p>
             <input
               className="w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
@@ -641,10 +900,35 @@ export default function RoadPatrolPage() {
             />
             <input
               className="w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
+              placeholder="Владелец ТС (обязательно)"
+              value={regOwner}
+              onChange={(e) => setRegOwner(e.target.value)}
+              required
+            />
+            <input
+              className="w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
               placeholder="Модель (необязательно)"
               value={regModel}
               onChange={(e) => setRegModel(e.target.value)}
             />
+            <div>
+              <label className="text-xs text-[var(--dor-muted)]">Фото ТС (обязательно)</label>
+              <input
+                ref={regFileRef}
+                type="file"
+                accept="image/*"
+                className="mt-1 block w-full text-xs text-[var(--dor-muted)]"
+                onChange={onRegistryPhoto}
+              />
+              {regPhoto ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={regPhoto}
+                  alt="Предпросмотр"
+                  className="mt-2 max-h-40 w-full rounded-lg border border-[var(--dor-border)] object-contain"
+                />
+              ) : null}
+            </div>
             <textarea
               className="w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
               placeholder="Примечания (осмотр, нарушения…)"
@@ -656,7 +940,7 @@ export default function RoadPatrolPage() {
               <button
                 type="button"
                 className="dor-btn-primary flex-1 text-sm"
-                disabled={regBusy || !regPlate.trim()}
+                disabled={regBusy || !regPlate.trim() || !regOwner.trim() || !regPhoto}
                 onClick={submitRegistry}
               >
                 Внести в базу
