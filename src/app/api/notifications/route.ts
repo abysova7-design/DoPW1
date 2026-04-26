@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET() {
   const user = await requireUser();
   if (!user) return NextResponse.json({ error: "Нет доступа" }, { status: 401 });
@@ -12,7 +15,16 @@ export async function GET() {
     take: 50,
   });
 
-  return NextResponse.json({ notifications: items });
+  return NextResponse.json(
+    { notifications: items },
+    {
+      headers: {
+        "Cache-Control": "no-store, no-cache, must-revalidate",
+        Pragma: "no-cache",
+        Expires: "0",
+      },
+    },
+  );
 }
 
 export async function PATCH(req: Request) {

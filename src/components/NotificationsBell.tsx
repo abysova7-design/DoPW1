@@ -26,17 +26,19 @@ const TYPE_ICON: Record<string, string> = {
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<N[]>([]);
-  const prevUnread = useRef(0);
   const knownNotifIds = useRef<Set<string>>(new Set());
   const soundInitialized = useRef(false);
   const btnRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
   const [dropStyle, setDropStyle] = useState<React.CSSProperties>({});
   const [mounted, setMounted] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/notifications");
+    const r = await fetch("/api/notifications", { cache: "no-store" });
     if (!r.ok) return;
     const d = await safeJson<{ notifications?: N[] }>(r, {});
     const next: N[] = d.notifications ?? [];
@@ -67,8 +69,6 @@ export function NotificationsBell() {
       }
     }
 
-    const nextUnread = next.filter((x) => !x.read).length;
-    prevUnread.current = nextUnread;
     setItems(next);
   }, []);
 
@@ -78,11 +78,15 @@ export function NotificationsBell() {
     return () => clearInterval(t);
   }, [load]);
 
-  // Закрыть при клике вне
+  // Закрыть только при клике вне кнопки И вне portal-дропдауна
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
-      if (btnRef.current && !btnRef.current.closest("[data-notif-root]")?.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const btnRoot = btnRef.current?.closest("[data-notif-root]");
+      const insideBtnRoot = !!btnRoot?.contains(target);
+      const insideDropdown = !!dropRef.current?.contains(target);
+      if (!insideBtnRoot && !insideDropdown) {
         setOpen(false);
       }
     }
@@ -99,7 +103,7 @@ export function NotificationsBell() {
         top: rect.bottom + 8,
         right: Math.max(8, rightGap),
         width: Math.min(400, window.innerWidth - 32),
-        zIndex: 2147483647, // максимально возможный z-index
+        zIndex: 2147483647,
       });
     }
     setOpen((v) => !v);
@@ -113,7 +117,8 @@ export function NotificationsBell() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "readAll" }),
     });
-    load();
+    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+    await load();
   }
 
   async function markOne(id: string) {
@@ -123,11 +128,12 @@ export function NotificationsBell() {
       body: JSON.stringify({ id }),
     });
     setItems((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
-    prevUnread.current = Math.max(0, prevUnread.current - 1);
+    await load();
   }
 
   const dropdown = (
     <div
+      ref={dropRef}
       data-notif-root=""
       style={{
         ...dropStyle,
@@ -223,11 +229,19 @@ export function NotificationsBell() {
         {unread > 0 && (
           <span
             style={{
-              position: "absolute", top: -4, right: -4,
-              minWidth: 18, height: 18, borderRadius: 999,
+              position: "absolute",
+              top: -4,
+              right: -4,
+              minWidth: 18,
+              height: 18,
+              borderRadius: 999,
               background: "var(--dor-orange, #e85d04)",
-              color: "#000", fontSize: 10, fontWeight: 700,
-              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#000",
+              fontSize: 10,
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
               padding: "0 4px",
             }}
           >

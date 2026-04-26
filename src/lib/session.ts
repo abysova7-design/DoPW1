@@ -1,4 +1,4 @@
-import type { SessionOptions } from "iron-session";
+﻿import type { SessionOptions } from "iron-session";
 
 export const sessionOptions: SessionOptions = {
   password:
@@ -7,7 +7,13 @@ export const sessionOptions: SessionOptions = {
   cookieName: "dopw_portal",
   cookieOptions: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // For HTTP-on-IP deployments use SESSION_SECURE_COOKIE=false
+    secure:
+      process.env.SESSION_SECURE_COOKIE === "true"
+        ? true
+        : process.env.SESSION_SECURE_COOKIE === "false"
+          ? false
+          : process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 60 * 60 * 24 * 14,
     path: "/",

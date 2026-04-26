@@ -216,18 +216,10 @@ export default function DashboardPage() {
                 </div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full flex-wrap items-center gap-2 md:w-auto md:justify-end">
               <NotificationsBell />
-              {canManageJobApplications(me.positionRank, me.isAdmin) && (
-                <Link
-                  href="/dashboard/applications"
-                  className="text-xs font-medium text-[var(--dor-orange)] hover:underline"
-                >
-                  🧾 Заявки
-                </Link>
-              )}
               {(me.isDispatcher || me.isAdmin) && (
-                <Link href="/dashboard/dispatch" className="dor-btn-primary text-sm relative">
+                <Link href="/dashboard/dispatch" className="dor-btn-primary relative text-sm">
                   📡 Диспетчер
                   {openCalls.length > 0 && (
                     <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
@@ -346,7 +338,7 @@ export default function DashboardPage() {
               key={t}
               type="button"
               onClick={() => setTab(t)}
-              className={`flex-1 rounded-xl px-3 py-2 text-sm font-medium transition ${
+              className={`min-w-[7rem] flex-1 rounded-xl px-3 py-2 text-sm font-medium transition ${
                 tab === t
                   ? "bg-[var(--dor-orange)] text-black"
                   : "text-[var(--dor-muted)] hover:text-[var(--dor-text)]"
@@ -384,6 +376,16 @@ export default function DashboardPage() {
                   <div className="text-xs text-[var(--dor-muted)]">Очередь и результаты</div>
                 </div>
               </Link>
+              {canManageJobApplications(me.positionRank, me.isAdmin) && (
+                <Link href="/dashboard/applications"
+                  className="dor-card flex items-center gap-3 p-4 hover:border-[var(--dor-orange)]/50 transition">
+                  <span className="text-2xl">🧾</span>
+                  <div>
+                    <div className="font-medium text-sm">Заявки</div>
+                    <div className="text-xs text-[var(--dor-muted)]">Рассмотрение соискателей</div>
+                  </div>
+                </Link>
+              )}
               {me.isAdmin && (
                 <Link href="/admin"
                   className="dor-card flex items-center gap-3 p-4 hover:border-blue-500/40 transition">

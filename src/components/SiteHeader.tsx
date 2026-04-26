@@ -36,6 +36,7 @@ export function SiteHeader({
   isAdmin?: boolean;
   positionRank?: PositionRank | null;
 }) {
+  void isAdmin;
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--dor-border)] bg-[var(--dor-night)]/90 backdrop-blur">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
@@ -90,14 +91,6 @@ export function SiteHeader({
               <Link href="/dashboard" className="dor-btn-primary px-3 py-2 text-sm">
                 Личный кабинет
               </Link>
-              {isAdmin ? (
-                <Link
-                  href="/admin"
-                  className="dor-btn-secondary px-3 py-2 text-sm"
-                >
-                  Админка
-                </Link>
-              ) : null}
             </>
           ) : (
             <Link href="/login" className="dor-btn-primary px-3 py-2 text-sm">
