@@ -13,6 +13,7 @@ export function RadioPanel() {
     setTransmitting,
     micError,
     connectedCount,
+    requestMicPermission,
   } = useRadio();
 
   const talkingNow = useMemo(
@@ -33,7 +34,17 @@ export function RadioPanel() {
           <input
             type="checkbox"
             checked={enabled}
-            onChange={(e) => setEnabled(e.target.checked)}
+            onChange={async (e) => {
+              const next = e.target.checked;
+              if (next) {
+                const ok = await requestMicPermission();
+                if (!ok) {
+                  setEnabled(false);
+                  return;
+                }
+              }
+              setEnabled(next);
+            }}
           />
           Вкл
         </label>
@@ -79,7 +90,21 @@ export function RadioPanel() {
           ))
         )}
       </div>
-      {micError ? <div className="mt-2 text-xs text-red-400">{micError}</div> : null}
+      {micError ? (
+        <div className="mt-2 space-y-2">
+          <div className="text-xs text-red-400">{micError}</div>
+          <button
+            type="button"
+            className="dor-btn-secondary w-full text-xs"
+            onClick={async () => {
+              const ok = await requestMicPermission();
+              if (ok) setEnabled(true);
+            }}
+          >
+            Запросить доступ к микрофону
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

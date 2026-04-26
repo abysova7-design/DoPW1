@@ -28,6 +28,7 @@ type RadioContextValue = {
   setTransmitting: (v: boolean) => void;
   micError: string | null;
   connectedCount: number;
+  requestMicPermission: () => Promise<boolean>;
 };
 
 const RadioContext = createContext<RadioContextValue | null>(null);
@@ -95,6 +96,11 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   }, []);
+
+  const requestMicPermission = useCallback(async () => {
+    const s = await ensureMic();
+    return Boolean(s);
+  }, [ensureMic]);
 
   const publishSignal = useCallback(
     async (toUserId: string, type: "offer" | "answer" | "ice", payload: unknown) => {
@@ -301,8 +307,18 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
       setTransmitting,
       micError,
       connectedCount,
+      requestMicPermission,
     }),
-    [connectedCount, enabled, me, micError, participants, setTransmitting, transmitting],
+    [
+      connectedCount,
+      enabled,
+      me,
+      micError,
+      participants,
+      requestMicPermission,
+      setTransmitting,
+      transmitting,
+    ],
   );
 
   return <RadioContext.Provider value={value}>{children}</RadioContext.Provider>;
