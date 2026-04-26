@@ -2,13 +2,27 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DispatchMapClient } from "@/components/DispatchMapClient";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import type { PositionRank } from "@/lib/positions";
 import { RANK_LABELS } from "@/lib/positions";
 import { useRadio } from "@/components/RadioProvider";
+import { playSound } from "@/lib/sounds";
+import { CIVIC_CATEGORY_LABELS, isCivicCategory } from "@/lib/civic-help";
+
+type CivicRequest = {
+  id: string;
+  fullName: string;
+  category: string;
+  description: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  status: string;
+  createdAt: string;
+};
 
 type Worker = {
   shiftId: string;
@@ -83,6 +97,14 @@ export default function DispatchPage() {
   } | null>(null);
   const [workers, setWorkers] = useState<Worker[]>([]);
   const [calls, setCalls] = useState<Call[]>([]);
+  const [civicRequests, setCivicRequests] = useState<CivicRequest[]>([]);
+  const [civicPollReady, setCivicPollReady] = useState(false);
+  const [civicAssignId, setCivicAssignId] = useState<string | null>(null);
+  const [civicEmployeeId, setCivicEmployeeId] = useState("");
+  const [civicBusy, setCivicBusy] = useState(false);
+  const civicSectionRef = useRef<HTMLDivElement | null>(null);
+  const knownCivicIds = useRef<Set<string>>(new Set());
+  const civicSoundPrimed = useRef(false);
 
   const [title, setTitle] = useState("");
   const [bodyText, setBodyText] = useState("");
@@ -109,6 +131,15 @@ export default function DispatchPage() {
     const c = await fetch("/api/dispatch", { cache: "no-store" });
     const cd = await c.json().catch(() => ({}));
     setCalls(cd.calls ?? []);
+
+    const civ = await fetch("/api/public-assistance", { cache: "no-store" });
+    if (civ.ok) {
+      const civd = await civ.json().catch(() => ({}));
+      setCivicRequests(civd.requests ?? []);
+      setCivicPollReady(true);
+    } else {
+      setCivicRequests([]);
+    }
   }, [router]);
 
   useEffect(() => { load(); }, [load]);
@@ -124,6 +155,22 @@ export default function DispatchPage() {
     window.addEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
     return () => window.removeEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
   }, []);
+
+  useEffect(() => {
+    if (!civicPollReady) return;
+    const open = civicRequests.filter((r) => r.status === "OPEN");
+    if (!civicSoundPrimed.current) {
+      open.forEach((r) => knownCivicIds.current.add(r.id));
+      civicSoundPrimed.current = true;
+      return;
+    }
+    const newcomers = open.filter((r) => !knownCivicIds.current.has(r.id));
+    newcomers.forEach((r) => knownCivicIds.current.add(r.id));
+    if (newcomers.length > 0) {
+      playSound("alert");
+      civicSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [civicRequests, civicPollReady]);
 
   async function sendCall(e: React.FormEvent) {
     e.preventDefault();
@@ -151,6 +198,35 @@ export default function DispatchPage() {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action }),
+    });
+    load();
+  }
+
+  async function submitCivicAssign() {
+    if (!civicAssignId || !civicEmployeeId) return;
+    setCivicBusy(true);
+    const r = await fetch(`/api/public-assistance/${civicAssignId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "assign", employeeUserId: civicEmployeeId }),
+    });
+    setCivicBusy(false);
+    if (!r.ok) {
+      const e2 = await r.json().catch(() => ({}));
+      setMsg(e2.error ?? "Ошибка назначения");
+      return;
+    }
+    setCivicAssignId(null);
+    setCivicEmployeeId("");
+    setMsg("Вызов адресован сотруднику.");
+    load();
+  }
+
+  async function cancelCivic(id: string) {
+    await fetch(`/api/public-assistance/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "cancel" }),
     });
     load();
   }
@@ -362,6 +438,112 @@ export default function DispatchPage() {
             </form>
           </section>
         </div>
+
+        <div ref={civicSectionRef} className="dor-card p-5">
+          <h2 className="font-semibold">Гражданская помощь</h2>
+          <p className="mt-1 text-xs text-[var(--dor-muted)]">
+            Обращения с публичной страницы «Помощь». Примите вызов и выберите сотрудника —
+            задача уйдёт в обычные активные вызовы.
+          </p>
+          <div className="mt-3 space-y-3">
+            {civicRequests.length === 0 ? (
+              <p className="text-sm text-[var(--dor-muted)]">Нет открытых обращений.</p>
+            ) : (
+              civicRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="font-medium text-amber-100">
+                      {isCivicCategory(req.category)
+                        ? CIVIC_CATEGORY_LABELS[req.category]
+                        : req.category}{" "}
+                      · {req.fullName}
+                    </div>
+                    <span className="text-xs font-semibold text-amber-400">
+                      {req.status === "OPEN" ? "Новое" : req.status}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-[var(--dor-muted)]">{req.description}</p>
+                  <p className="mt-1 text-xs text-[var(--dor-muted)]">📞 {req.phone}</p>
+                  <p className="mt-1 text-xs text-[var(--dor-muted)]">
+                    📍 {Math.round(req.lat)}, {Math.round(req.lng)} ·{" "}
+                    {new Date(req.createdAt).toLocaleString("ru-RU")}
+                  </p>
+                  {req.status === "OPEN" ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="dor-btn-primary text-xs"
+                        onClick={() => {
+                          setCivicAssignId(req.id);
+                          setCivicEmployeeId(workers[0]?.user.id ?? "");
+                        }}
+                      >
+                        Принять и назначить
+                      </button>
+                      <button
+                        type="button"
+                        className="dor-btn-secondary text-xs"
+                        onClick={() => cancelCivic(req.id)}
+                      >
+                        Отклонить
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {civicAssignId ? (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4"
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="dor-card max-w-md space-y-4 p-5">
+              <h3 className="font-semibold">Назначить сотрудника</h3>
+              <p className="text-sm text-[var(--dor-muted)]">
+                Выберите сотрудника на смене — ему придёт уведомление и вызов в личном кабинете.
+              </p>
+              <select
+                className="w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 text-sm"
+                value={civicEmployeeId}
+                onChange={(e) => setCivicEmployeeId(e.target.value)}
+              >
+                {workers.map((w) => (
+                  <option key={w.user.id} value={w.user.id}>
+                    {w.user.displayName ?? w.user.nickname}
+                  </option>
+                ))}
+              </select>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="dor-btn-primary text-sm disabled:opacity-50"
+                  disabled={civicBusy || !civicEmployeeId}
+                  onClick={() => submitCivicAssign()}
+                >
+                  Подтвердить
+                </button>
+                <button
+                  type="button"
+                  className="dor-btn-secondary text-sm"
+                  disabled={civicBusy}
+                  onClick={() => {
+                    setCivicAssignId(null);
+                    setCivicEmployeeId("");
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <section className="dor-card p-5">
           <h2 className="font-semibold">Активные вызовы</h2>

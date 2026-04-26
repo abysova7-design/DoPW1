@@ -45,37 +45,37 @@ export default async function HomePage() {
     <div className="dor-stripes min-h-screen">
       <SiteHeader authed={!!session.userId} isAdmin={!!session.isAdmin} />
       <main>
-        <section id="about" className="mx-auto max-w-6xl px-4 py-16 md:py-24">
-          <div className="dor-card overflow-hidden p-8 md:p-12">
-            <p className="text-sm font-medium uppercase tracking-[0.2em] text-[var(--dor-orange)]">
+        <section id="about" className="mx-auto max-w-6xl px-3 py-10 sm:px-4 sm:py-16 md:py-24">
+          <div className="dor-card overflow-hidden p-5 sm:p-8 md:p-12">
+            <p className="text-xs font-medium uppercase tracking-[0.15em] text-[var(--dor-orange)] sm:text-sm sm:tracking-[0.2em]">
               СЕРВИСНЫЙ ПОРТАЛ DOPW
             </p>
-            <h1 className="mt-4 text-3xl font-bold leading-tight md:text-5xl">
+            <h1 className="mt-3 text-2xl font-bold leading-tight sm:mt-4 sm:text-3xl md:text-5xl">
               Департамент общественных работ и транспорта
             </h1>
-            <p className="mt-6 max-w-3xl text-lg text-[var(--dor-muted)]">
+            <p className="mt-4 max-w-3xl text-base leading-relaxed text-[var(--dor-muted)] sm:mt-6 sm:text-lg">
               ДОР формирует политику развития дорожной и городской инфраструктуры,
               обеспечивает инженерную безопасность объектов, реагирует на аварии и
               ведёт проекты от изысканий до сдачи — для комфорта и благополучия
               граждан штата.
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/#structure" className="dor-btn-primary">
+            <div className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-3">
+              <Link href="/#structure" className="dor-btn-primary w-full justify-center sm:w-auto">
                 Структура и задачи
               </Link>
-              <Link href="/#careers" className="dor-btn-secondary">
+              <Link href="/#careers" className="dor-btn-secondary w-full justify-center sm:w-auto">
                 Соискателям
               </Link>
-              <Link href="/login" className="dor-btn-secondary">
+              <Link href="/login" className="dor-btn-secondary w-full justify-center sm:w-auto">
                 Вход сотрудника
               </Link>
             </div>
           </div>
         </section>
 
-        <section id="structure" className="mx-auto max-w-6xl px-4 pb-16">
-          <h2 className="text-2xl font-bold">Семь отделений</h2>
-          <p className="mt-2 max-w-3xl text-[var(--dor-muted)]">
+        <section id="structure" className="mx-auto max-w-6xl px-3 pb-12 sm:px-4 sm:pb-16">
+          <h2 className="text-xl font-bold sm:text-2xl">Семь отделений</h2>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--dor-muted)] sm:text-base">
             Каждое направление закрывает свой фронт работ — от геодезии до лабораторных
             испытаний.
           </p>
@@ -89,9 +89,9 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section id="careers" className="mx-auto max-w-6xl px-4 pb-20">
-          <h2 className="text-2xl font-bold">Соискателям</h2>
-          <p className="mt-3 max-w-4xl text-[var(--dor-muted)]">
+        <section id="careers" className="mx-auto max-w-6xl px-3 pb-16 sm:px-4 sm:pb-20">
+          <h2 className="text-xl font-bold sm:text-2xl">Соискателям</h2>
+          <p className="mt-3 max-w-4xl text-sm leading-relaxed text-[var(--dor-muted)] sm:text-base">
             Ищете работу с смыслом, стабильным доходом и сильной командой? DoPW
             ищет ответственных инженеров, техников и мастеров поля: дороги, стройка,
             логистика и сопровождение — всё, что видно и ощутимо в штате. Заполните
@@ -109,12 +109,12 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section id="gallery" className="mx-auto max-w-6xl px-4 pb-24">
-          <h2 className="text-2xl font-bold">Фото нашей работы</h2>
+        <section id="gallery" className="mx-auto max-w-6xl px-3 pb-16 sm:px-4 sm:pb-24">
+          <h2 className="text-xl font-bold sm:text-2xl">Фото нашей работы</h2>
           <PublicGallery />
         </section>
       </main>
-      <footer className="border-t border-[var(--dor-border)] py-8 text-center text-sm text-[var(--dor-muted)]">
+      <footer className="border-t border-[var(--dor-border)] px-3 py-6 text-center text-xs text-[var(--dor-muted)] sm:py-8 sm:text-sm">
         Портал ДОР · Proxima RP · Не является официальным ресурсом Rockstar Games
       </footer>
     </div>

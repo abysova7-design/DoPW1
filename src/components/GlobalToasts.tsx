@@ -20,6 +20,7 @@ const TYPE_ICON: Record<string, string> = {
   TASK_ASSIGNED: "📋",
   SYSTEM: "🔔",
   JOB_APPLICATION: "🧾",
+  CIVIC_HELP: "🆘",
 };
 
 const TYPE_COLOR: Record<string, string> = {
@@ -29,6 +30,7 @@ const TYPE_COLOR: Record<string, string> = {
   TASK_ASSIGNED: "#40916c",
   SYSTEM: "#30363d",
   JOB_APPLICATION: "#a855f7",
+  CIVIC_HELP: "#f59e0b",
 };
 
 export function GlobalToasts() {
@@ -58,7 +60,11 @@ export function GlobalToasts() {
 
     // Приоритеты: вызовы → собес (sobes) → экзамен → остальное
     const hasCall = newOnes.some(
-      (n) => n.type === "DISPATCH" || n.type === "CALL_BASE" || n.type === "BROADCAST",
+      (n) =>
+        n.type === "DISPATCH" ||
+        n.type === "CALL_BASE" ||
+        n.type === "BROADCAST" ||
+        n.type === "CIVIC_HELP",
     );
     const hasInterview =
       !hasCall && newOnes.some((n) => n.type === "JOB_APPLICATION");
