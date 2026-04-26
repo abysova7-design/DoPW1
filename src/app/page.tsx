@@ -60,6 +60,9 @@ export default async function HomePage() {
               граждан штата.
             </p>
             <div className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-3">
+              <Link href="/help" className="dor-btn-secondary w-full justify-center sm:w-auto">
+                Помощь
+              </Link>
               <Link href="/#structure" className="dor-btn-primary w-full justify-center sm:w-auto">
                 Структура и задачи
               </Link>
