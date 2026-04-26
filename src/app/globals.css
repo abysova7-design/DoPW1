@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+:root {
+  --dor-orange: #e85d04;
+  --dor-orange-dim: #c75203;
+  --dor-green: #2d6a4f;
+  --dor-green-bright: #40916c;
+  --dor-night: #0d1117;
+  --dor-surface: #161b22;
+  --dor-border: #30363d;
+  --dor-text: #e6edf3;
+  --dor-muted: #8b949e;
+}
+
+body {
+  background: var(--dor-night);
+  color: var(--dor-text);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@layer utilities {
+  .dor-card {
+    @apply rounded-2xl border border-[var(--dor-border)] bg-[var(--dor-surface)]/90 shadow-xl backdrop-blur;
+  }
+  .dor-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium transition hover:opacity-95 active:scale-[0.99];
+  }
+  .dor-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium transition hover:opacity-95 active:scale-[0.99] bg-[var(--dor-orange)] text-black;
+  }
+  .dor-btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 font-medium transition hover:opacity-95 active:scale-[0.99] border border-[var(--dor-border)] bg-[var(--dor-surface)] text-[var(--dor-text)];
+  }
+  .dor-stripes {
+    background: repeating-linear-gradient(
+      -45deg,
+      rgba(232, 93, 4, 0.08),
+      rgba(232, 93, 4, 0.08) 12px,
+      rgba(45, 106, 79, 0.08) 12px,
+      rgba(45, 106, 79, 0.08) 24px
+    );
+  }
+}
+
+.leaflet-container {
+  background: #0d1117 !important;
+  border-radius: 1rem;
+}

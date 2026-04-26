@@ -1,0 +1,226 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum PositionRank {
+  TECHNICIAN
+  ENGINEER_I
+  ENGINEER_II
+  CHIEF_SPECIALIST
+  SUB_DIRECTOR
+  DIRECTOR
+}
+
+enum TaskKind {
+  TOW_TRUCK
+  SITE_INSPECTION
+  LOGISTICS_RUN
+  LAB_SAMPLE
+  CONSTRUCTION_SUPPORT
+  CONSTRUCTION_SITE
+  ADMIN_PAPERWORK
+}
+
+enum EvacuationStatus {
+  DRAFT
+  ACTIVE
+  DELIVERED
+  CLOSED
+}
+
+enum NotificationType {
+  CALL_BASE
+  BROADCAST
+  TASK_ASSIGNED
+  SYSTEM
+  DISPATCH
+  JOB_APPLICATION
+}
+
+model User {
+  id               String       @id @default(cuid())
+  nickname         String       @unique
+  codeHash         String
+  isAdmin          Boolean      @default(false)
+  isDispatcher     Boolean      @default(false)
+  positionRank     PositionRank @default(TECHNICIAN)
+  department       String?
+  displayName      String?
+  xp               Int          @default(0)
+  level            Int          @default(1)
+  towTruckCert     Boolean      @default(false)
+  driverCert       Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  shifts            Shift[]
+  tasks             WorkTask[]
+  evacuations       Evacuation[]
+  pings             LocationPing[]
+  notifications     Notification[]
+  dispatchCreated   DispatchCall[] @relation("DispatchCreated")
+  dispatchReceived  DispatchCall[] @relation("DispatchReceived")
+  examRegistrations ExamRegistration[] @relation("ExamStudent")
+  examsGiven        ExamRegistration[] @relation("ExaminerRel")
+  channelPosts        ChannelPost[]
+  vehicleAssignments  VehicleAssignment[]
+  disciplinesReceived DisciplineRecord[] @relation("DisciplineTarget")
+  disciplinesIssued   DisciplineRecord[] @relation("DisciplineIssuer")
+}
+
+model VehicleRegistry {
+  id        String   @id @default(cuid())
+  plate     String   @unique
+  model     String?
+  notes     String?
+  createdAt DateTime @default(now())
+}
+
+model Shift {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  tasks     WorkTask[]
+}
+
+model WorkTask {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shiftId   String?
+  shift     Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  kind      TaskKind
+  title     String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+  notes     String?
+  evacuation Evacuation?
+}
+
+model Evacuation {
+  id          String           @id @default(cuid())
+  userId      String
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskId      String?          @unique
+  task        WorkTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  plate       String
+  violation   String
+  description String?
+  status      EvacuationStatus @default(DRAFT)
+  photoUrls   String
+  createdAt   DateTime         @default(now())
+  closedAt    DateTime?
+}
+
+model LocationPing {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lat       Float
+  lng       Float
+  label     String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType @default(SYSTEM)
+  title     String
+  body      String
+  read      Boolean          @default(false)
+  createdAt DateTime         @default(now())
+}
+
+model DispatchCall {
+  id        String    @id @default(cuid())
+  creatorId String
+  creator   User      @relation("DispatchCreated", fields: [creatorId], references: [id], onDelete: Cascade)
+  targetId  String?
+  target    User?     @relation("DispatchReceived", fields: [targetId], references: [id], onDelete: SetNull)
+  title     String
+  body      String
+  lat       Float?
+  lng       Float?
+  status    String    @default("OPEN")
+  createdAt DateTime  @default(now())
+  closedAt  DateTime?
+}
+
+model ExamRegistration {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation("ExamStudent", fields: [userId], references: [id], onDelete: Cascade)
+  kind       String
+  status     String    @default("PENDING")
+  testScore  Int?
+  examNote   String?
+  examinerId String?
+  examiner   User?     @relation("ExaminerRel", fields: [examinerId], references: [id], onDelete: SetNull)
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+}
+
+model Channel {
+  id    String        @id @default(cuid())
+  slug  String        @unique
+  title String
+  posts ChannelPost[]
+}
+
+model VehicleAssignment {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cid         String
+  vehicleName String
+  photoUrl    String?
+  assignedAt  DateTime @default(now())
+}
+
+model DisciplineRecord {
+  id         String   @id @default(cuid())
+  targetId   String
+  target     User     @relation("DisciplineTarget", fields: [targetId], references: [id], onDelete: Cascade)
+  issuerId   String
+  issuer     User     @relation("DisciplineIssuer", fields: [issuerId], references: [id], onDelete: Cascade)
+  type       String
+  reason     String
+  createdAt  DateTime @default(now())
+}
+
+model ChannelPost {
+  id        String   @id @default(cuid())
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title     String
+  body      String
+  emoji     String?
+  createdAt DateTime @default(now())
+}
+
+/// Заявка на собеседование (публичная форма на главной)
+model JobApplication {
+  id                String   @id @default(cuid())
+  nickname          String
+  gameLevel         String
+  drugAddict        Boolean  @default(false)
+  phone             String
+  engineeringEdu    Boolean  @default(false)
+  educationLevel    String?
+  driverLicense     Boolean  @default(false)
+  licenseCategory   String?
+  interviewAt       DateTime
+  expectedIncome    Int
+  createdAt         DateTime @default(now())
+}

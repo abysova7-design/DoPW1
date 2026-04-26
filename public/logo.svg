@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="12" fill="#161b22"/>
+  <path d="M12 44 L32 14 L52 44 Z" stroke="#e85d04" stroke-width="3" fill="none"/>
+  <rect x="18" y="38" width="28" height="6" rx="2" fill="#2d6a4f"/>
+  <text x="32" y="58" text-anchor="middle" fill="#8b949e" font-size="8" font-family="system-ui">DoPW</text>
+</svg>
