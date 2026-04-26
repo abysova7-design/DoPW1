@@ -53,12 +53,24 @@ export async function PATCH(
     }
   }
 
-  if (typeof body.isDispatcher === "boolean") {
+  if (
+    typeof body.isDispatcher === "boolean" &&
+    body.isDispatcher !== target.isDispatcher
+  ) {
     updateData.isDispatcher = body.isDispatcher;
     changes.push(
       body.isDispatcher
         ? "Назначен диспетчером"
         : "Снята роль диспетчера",
+    );
+  }
+
+  if (typeof body.isAdmin === "boolean" && body.isAdmin !== target.isAdmin) {
+    updateData.isAdmin = body.isAdmin;
+    changes.push(
+      body.isAdmin
+        ? "Выдан доступ к Админке"
+        : "Снят доступ к Админке",
     );
   }
 

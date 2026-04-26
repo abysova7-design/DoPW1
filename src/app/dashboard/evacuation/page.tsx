@@ -290,6 +290,9 @@ export default function EvacuationPage() {
     setHits([]);
     setHistory([]);
     setMsg(`ТС сдано на штрафстоянку. Эвакуация закрыта. +${d.xpGain} XP (уровень ${d.level}, всего XP ${d.xp}).`);
+    setTimeout(() => {
+      window.location.assign("/dashboard/evacuation");
+    }, 5000);
   }
 
   if (!evacuation) {

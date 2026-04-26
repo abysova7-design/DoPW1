@@ -2,6 +2,29 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
 
+const BASE_CALL_SELECT = {
+  id: true,
+  title: true,
+  body: true,
+  status: true,
+  lat: true,
+  lng: true,
+  createdAt: true,
+  closedAt: true,
+  creatorId: true,
+  targetId: true,
+} as const;
+
+async function hasReportColumns() {
+  try {
+    const cols = await prisma.$queryRaw<Array<{ name: string }>>`PRAGMA table_info('DispatchCall')`;
+    const names = new Set(cols.map((c) => c.name));
+    return names.has("reportText") && names.has("reportAt") && names.has("reportById");
+  } catch {
+    return false;
+  }
+}
+
 export async function PATCH(
   req: Request,
   ctx: { params: Promise<{ id: string }> },
@@ -15,6 +38,7 @@ export async function PATCH(
 
   const body = await req.json().catch(() => ({}));
   const action = String(body?.action ?? "");
+  const reportCols = await hasReportColumns();
 
   if (action === "accept") {
     if (call.targetId && call.targetId !== user.id) {
@@ -23,6 +47,7 @@ export async function PATCH(
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "ACCEPTED", targetId: call.targetId ?? user.id },
+      select: BASE_CALL_SELECT,
     });
     return NextResponse.json({ call: updated });
   }
@@ -34,11 +59,18 @@ export async function PATCH(
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "DONE", closedAt: new Date() },
+      select: BASE_CALL_SELECT,
     });
     return NextResponse.json({ call: updated });
   }
 
   if (action === "report") {
+    if (!reportCols) {
+      return NextResponse.json(
+        { error: "Требуется обновление БД (prisma db push на сервере)" },
+        { status: 503 },
+      );
+    }
     if (call.targetId !== user.id && !user.isDispatcher && !user.isAdmin) {
       return NextResponse.json({ error: "Нет прав" }, { status: 403 });
     }
@@ -57,6 +89,12 @@ export async function PATCH(
         reportAt: new Date(),
         reportById: user.id,
       },
+      select: {
+        ...BASE_CALL_SELECT,
+        reportText: true,
+        reportAt: true,
+        reportById: true,
+      },
     });
     return NextResponse.json({ call: updated });
   }
@@ -72,6 +110,7 @@ export async function PATCH(
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "ONSITE" },
+      select: BASE_CALL_SELECT,
     });
     if (typeof call.lat === "number" && typeof call.lng === "number") {
       await prisma.locationPing.create({
@@ -93,11 +132,18 @@ export async function PATCH(
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "CANCELLED", closedAt: new Date() },
+      select: BASE_CALL_SELECT,
     });
     return NextResponse.json({ call: updated });
   }
 
   if (action === "reopen") {
+    if (!reportCols) {
+      return NextResponse.json(
+        { error: "Требуется обновление БД (prisma db push на сервере)" },
+        { status: 503 },
+      );
+    }
     if (!user.isDispatcher && !user.isAdmin) {
       return NextResponse.json({ error: "Нет прав" }, { status: 403 });
     }

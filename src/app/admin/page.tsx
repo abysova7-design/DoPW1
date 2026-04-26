@@ -74,6 +74,7 @@ export default function AdminPage() {
   const [editDept, setEditDept] = useState("");
   const [editDisplay, setEditDisplay] = useState("");
   const [editDispatcher, setEditDispatcher] = useState(false);
+  const [editAdmin, setEditAdmin] = useState(false);
 
   // Закрепление машин
   const [vaUserId, setVaUserId] = useState("");
@@ -178,6 +179,7 @@ export default function AdminPage() {
     setEditDept(u.department ?? "");
     setEditDisplay(u.displayName ?? "");
     setEditDispatcher(u.isDispatcher);
+    setEditAdmin(u.isAdmin);
   }
 
   async function saveEdit(e: React.FormEvent) {
@@ -191,6 +193,7 @@ export default function AdminPage() {
         department: editDept,
         displayName: editDisplay,
         isDispatcher: editDispatcher,
+        isAdmin: editAdmin,
       }),
     });
     const d = await r.json();
@@ -705,6 +708,15 @@ export default function AdminPage() {
                     onChange={(e) => setEditDispatcher(e.target.checked)}
                   />
                   Роль диспетчера 📡
+                </label>
+                <label className="flex cursor-pointer items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="accent-[var(--dor-orange)]"
+                    checked={editAdmin}
+                    onChange={(e) => setEditAdmin(e.target.checked)}
+                  />
+                  Доступ к Админке 👑
                 </label>
               </div>
               <div className="flex gap-2 md:col-span-2">

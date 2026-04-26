@@ -18,6 +18,7 @@ import {
 } from "@/lib/positions";
 import type { TaskKind } from "@prisma/client";
 import { playSound } from "@/lib/sounds";
+import { useRadio } from "@/components/RadioProvider";
 
 type Me = {
   id: string;
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   const [reportText, setReportText] = useState("");
   const pingSectionRef = useRef<HTMLDivElement>(null);
   const knownCallIdsRef = useRef<Set<string>>(new Set());
+  const radio = useRadio();
 
   const refresh = useCallback(async () => {
     const [rme, rs, rdc] = await Promise.all([
@@ -241,6 +243,9 @@ export default function DashboardPage() {
                 <p className="text-sm text-[var(--dor-muted)]">
                   {RANK_LABELS[me.positionRank]}
                   {me.department ? ` · ${me.department}` : ""}
+                </p>
+                <p className="mt-1 text-xs text-[var(--dor-muted)]">
+                  Рация: {radio.enabled ? `в канале (${radio.participants.length})` : "выключена"}
                 </p>
                 <div className="mt-2 w-48">
                   <div className="flex justify-between text-[10px] text-[var(--dor-muted)]">

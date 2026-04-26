@@ -66,6 +66,9 @@ model User {
   dispatchCreated   DispatchCall[] @relation("DispatchCreated")
   dispatchReceived  DispatchCall[] @relation("DispatchReceived")
   dispatchReports   DispatchCall[] @relation("DispatchReportBy")
+  radioSessions     RadioSession[]
+  radioSignalsSent  RadioSignal[]  @relation("RadioSignalFrom")
+  radioSignalsTo    RadioSignal[]  @relation("RadioSignalTo")
   examRegistrations ExamRegistration[] @relation("ExamStudent")
   examsGiven        ExamRegistration[] @relation("ExaminerRel")
   channelPosts        ChannelPost[]
@@ -161,6 +164,36 @@ model DispatchCall {
   reportBy   User?    @relation("DispatchReportBy", fields: [reportById], references: [id], onDelete: SetNull)
   createdAt DateTime  @default(now())
   closedAt  DateTime?
+}
+
+model RadioSession {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room           String
+  isTransmitting Boolean  @default(false)
+  lastHeartbeat  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, room])
+  @@index([room, lastHeartbeat])
+}
+
+model RadioSignal {
+  id         String    @id @default(cuid())
+  room       String
+  fromUserId String
+  fromUser   User      @relation("RadioSignalFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String?
+  toUser     User?     @relation("RadioSignalTo", fields: [toUserId], references: [id], onDelete: SetNull)
+  type       String
+  payload    String
+  createdAt  DateTime  @default(now())
+  consumedAt DateTime?
+
+  @@index([room, createdAt])
+  @@index([toUserId, consumedAt])
 }
 
 model ExamRegistration {

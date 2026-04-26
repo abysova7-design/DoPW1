@@ -8,6 +8,7 @@ import { DispatchMapClient } from "@/components/DispatchMapClient";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
 import type { PositionRank } from "@/lib/positions";
 import { RANK_LABELS } from "@/lib/positions";
+import { useRadio } from "@/components/RadioProvider";
 
 type Worker = {
   shiftId: string;
@@ -73,6 +74,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 export default function DispatchPage() {
   const router = useRouter();
+  const radio = useRadio();
   const [me, setMe] = useState<{
     isAdmin: boolean;
     isDispatcher: boolean;
@@ -196,6 +198,9 @@ export default function DispatchPage() {
             <h1 className="text-2xl font-bold">📡 Диспетчерский центр</h1>
             <p className="mt-1 text-sm text-[var(--dor-muted)]">
               Координация персонала на смене · обновление каждые 15 сек
+            </p>
+            <p className="mt-1 text-xs text-[var(--dor-muted)]">
+              Рация: {radio.enabled ? `активна (${radio.participants.length} в канале)` : "выключена"}
             </p>
           </div>
           <Link href="/dashboard" className="dor-btn-secondary text-sm">

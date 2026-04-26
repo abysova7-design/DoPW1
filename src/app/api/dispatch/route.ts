@@ -1,6 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
+import { randomUUID } from "crypto";
+
+const BASE_CALL_SELECT = {
+  id: true,
+  title: true,
+  body: true,
+  status: true,
+  lat: true,
+  lng: true,
+  createdAt: true,
+  closedAt: true,
+  creatorId: true,
+  targetId: true,
+} as const;
+
+async function hasReportColumns() {
+  try {
+    const cols = await prisma.$queryRaw<Array<{ name: string }>>`PRAGMA table_info('DispatchCall')`;
+    const names = new Set(cols.map((c) => c.name));
+    return names.has("reportText") && names.has("reportAt") && names.has("reportById");
+  } catch {
+    return false;
+  }
+}
 
 export async function GET() {
   const user = await requireUser();
@@ -16,12 +40,15 @@ export async function GET() {
           ],
         };
 
+  const reportCols = await hasReportColumns();
   const calls = await prisma.dispatchCall.findMany({
     where,
-    include: {
+    select: {
+      ...BASE_CALL_SELECT,
+      ...(reportCols ? { reportText: true, reportAt: true, reportById: true } : {}),
       creator: { select: { nickname: true, displayName: true } },
       target: { select: { nickname: true, displayName: true } },
-      reportBy: { select: { nickname: true, displayName: true } },
+      ...(reportCols ? { reportBy: { select: { nickname: true, displayName: true } } } : {}),
     },
     orderBy: { createdAt: "desc" },
     take: 40,
@@ -48,14 +75,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Заголовок и текст обязательны" }, { status: 400 });
   }
 
+  const reportCols = await hasReportColumns();
   const call = await prisma.dispatchCall.create({
     data: {
+      id: randomUUID(),
       creatorId: user.id,
       targetId,
       title,
       body: bodyText,
       lat: lat ?? undefined,
       lng: lng ?? undefined,
+    },
+    select: {
+      ...BASE_CALL_SELECT,
+      ...(reportCols ? { reportText: true, reportAt: true, reportById: true } : {}),
     },
   });
 
