@@ -25,6 +25,7 @@ export function RadioPanel() {
   );
 
   if (!me) return null;
+  if (typeof window !== "undefined" && !window.isSecureContext) return null;
 
   return (
     <div className="fixed bottom-4 left-4 z-[9999] w-[320px] max-w-[calc(100vw-2rem)] rounded-2xl border border-[var(--dor-border)] bg-[var(--dor-night)]/95 p-3 shadow-2xl backdrop-blur">

@@ -75,6 +75,10 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const ensureMic = useCallback(async () => {
+    if (!window.isSecureContext) {
+      setMicError("Микрофон доступен только по HTTPS (или localhost).");
+      return null;
+    }
     if (streamRef.current) return streamRef.current;
     try {
       const s = await navigator.mediaDevices.getUserMedia({
@@ -91,8 +95,15 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
       streamRef.current = s;
       setMicError(null);
       return s;
-    } catch {
-      setMicError("Нет доступа к микрофону.");
+    } catch (e) {
+      const err = e as DOMException | undefined;
+      if (err?.name === "NotAllowedError") {
+        setMicError("Доступ к микрофону запрещён в браузере для этого сайта.");
+      } else if (err?.name === "NotFoundError") {
+        setMicError("Микрофон не найден на устройстве.");
+      } else {
+        setMicError("Нет доступа к микрофону.");
+      }
       return null;
     }
   }, []);
