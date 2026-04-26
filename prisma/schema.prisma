@@ -111,6 +111,9 @@ model Evacuation {
   taskId      String?          @unique
   task        WorkTask?        @relation(fields: [taskId], references: [id], onDelete: SetNull)
   plate       String
+  ownerNickname String?
+  pickupLat   Float?
+  pickupLng   Float?
   violation   String
   description String?
   status      EvacuationStatus @default(DRAFT)

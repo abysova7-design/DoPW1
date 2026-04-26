@@ -81,6 +81,7 @@ export type WorkerMarker = {
   lat: number;
   lng: number;
   stale?: boolean;
+  evacuating?: boolean;
 };
 
 export type DispatchMapProps = {
@@ -122,11 +123,15 @@ export function DispatchMap({
           <Marker
             key={w.userId}
             position={[w.lat, w.lng]}
-            icon={workerPin(w.stale ? "#8b949e" : "#e85d04", w.nickname)}
+            icon={workerPin(w.stale ? "#8b949e" : w.evacuating ? "#3b82f6" : "#e85d04", w.nickname)}
           >
             <Popup>
               <strong>{w.nickname}</strong>
-              {w.stale ? " · данные устарели" : " · онлайн"}
+              {w.stale
+                ? " · данные устарели"
+                : w.evacuating
+                  ? " · ведет эвакуацию"
+                  : " · онлайн"}
             </Popup>
           </Marker>
         ))}
@@ -146,7 +151,7 @@ export function DispatchMap({
           fontSize: "10px",
           color: "var(--dor-muted)",
         }}>
-          🟠 сотрудники · 🟢 точка вызова · клик — выбрать координаты
+          🟠 сотрудники · 🔵 активная эвакуация · 🟢 точка вызова · клик — выбрать координаты
         </span>
       </div>
     </div>

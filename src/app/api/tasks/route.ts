@@ -46,6 +46,7 @@ export async function POST(req: Request) {
         userId: user.id,
         taskId: task.id,
         plate: "",
+        ownerNickname: "",
         violation: "",
         status: "DRAFT",
         photoUrls: "[]",

@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   const evacuations = await prisma.evacuation.findMany({
     where: {
       plate: { contains: plate },
-      status: { in: ["DELIVERED", "CLOSED"] },
+      status: "CLOSED",
     },
     orderBy: { createdAt: "desc" },
     take: 10,

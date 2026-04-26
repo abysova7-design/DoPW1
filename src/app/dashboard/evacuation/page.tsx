@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PhotoLightbox } from "@/components/PhotoLightbox";
+import { MapClient } from "@/components/MapClient";
 import type { PositionRank } from "@/lib/positions";
 import { compressImage } from "@/lib/compress-image";
 
@@ -12,6 +13,9 @@ type Vehicle = { id: string; plate: string; model: string | null; notes: string 
 type Evacuation = {
   id: string;
   plate: string;
+  ownerNickname: string | null;
+  pickupLat: number | null;
+  pickupLng: number | null;
   violation: string;
   description: string | null;
   status: string;
@@ -30,11 +34,19 @@ type EvacHistory = {
 
 export default function EvacuationPage() {
   const router = useRouter();
+  const STATUS_RU: Record<string, string> = {
+    DRAFT: "Черновик",
+    ACTIVE: "Ведется эвакуация",
+    DELIVERED: "В пути",
+    CLOSED: "Закрыта",
+  };
   const [evacuation, setEvacuation] = useState<Evacuation | null>(null);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Vehicle[]>([]);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [pickedLat, setPickedLat] = useState<number | null>(null);
+  const [pickedLng, setPickedLng] = useState<number | null>(null);
   const [history, setHistory] = useState<EvacHistory[]>([]);
   const [lightbox, setLightbox] = useState<{ photos: string[]; idx: number } | null>(null);
   const [headerUser, setHeaderUser] = useState<{
@@ -54,6 +66,8 @@ export default function EvacuationPage() {
       return;
     }
     setEvacuation(d.evacuation);
+    setPickedLat(d.evacuation?.pickupLat ?? null);
+    setPickedLng(d.evacuation?.pickupLng ?? null);
   }, [router]);
 
   useEffect(() => {
@@ -140,6 +154,7 @@ export default function EvacuationPage() {
     setBusy(true);
     setMsg(null);
     const plate = (document.getElementById("ev-plate") as HTMLInputElement)?.value;
+    const ownerNickname = (document.getElementById("ev-owner") as HTMLInputElement)?.value;
     const violation = (document.getElementById("ev-violation") as HTMLTextAreaElement)
       ?.value;
     const description = (document.getElementById("ev-desc") as HTMLTextAreaElement)
@@ -147,7 +162,14 @@ export default function EvacuationPage() {
     const r = await fetch(`/api/evacuations/${evacuation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ plate, violation, description }),
+      body: JSON.stringify({
+        plate,
+        ownerNickname,
+        violation,
+        description,
+        pickupLat: pickedLat,
+        pickupLng: pickedLng,
+      }),
     });
     setBusy(false);
     if (!r.ok) {
@@ -192,15 +214,42 @@ export default function EvacuationPage() {
     e.target.value = "";
   }
 
+  async function createTicket() {
+    if (!evacuation) return;
+    setBusy(true);
+    setMsg(null);
+    const r = await fetch(`/api/evacuations/${evacuation.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "createTicket" }),
+    });
+    setBusy(false);
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      setMsg(e.error ?? "Не удалось создать тикет");
+      return;
+    }
+    const d = await r.json();
+    setEvacuation(d.evacuation);
+    setMsg("Тикет создан. На карте диспетчера отмечен активный эвакуатор (синяя точка).");
+  }
+
   async function deliver() {
     if (!evacuation) return;
     setBusy(true);
-    await fetch(`/api/evacuations/${evacuation.id}`, {
+    setMsg(null);
+    const r = await fetch(`/api/evacuations/${evacuation.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "deliver" }),
     });
     setBusy(false);
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      setMsg(e.error ?? "Не удалось отметить доставку");
+      return;
+    }
+    setMsg("Перевозка начата. Статус изменён на «В пути».");
     load();
   }
 
@@ -220,10 +269,8 @@ export default function EvacuationPage() {
       return;
     }
     const d = await r.json();
-    setMsg(
-      `Эвакуация закрыта. +${d.xpGain} XP (уровень ${d.level}, всего XP ${d.xp}).`,
-    );
-    setTimeout(() => router.push("/dashboard"), 2000);
+    setEvacuation(d.evacuation);
+    setMsg(`ТС сдано на штрафстоянку. Эвакуация закрыта. +${d.xpGain} XP (уровень ${d.level}, всего XP ${d.xp}).`);
   }
 
   if (!evacuation) {
@@ -240,6 +287,14 @@ export default function EvacuationPage() {
   } catch {
     photos = [];
   }
+  const isClosed = evacuation.status === "CLOSED";
+  const hasRequiredFields = Boolean(evacuation.plate?.trim() && evacuation.violation?.trim());
+  const hasPickupPoint = pickedLat != null && pickedLng != null;
+  const hasPhotos = photos.length > 0;
+  const canCreateTicket = evacuation.status === "DRAFT" && hasRequiredFields && hasPickupPoint;
+  const canUploadPhotos = evacuation.status === "ACTIVE" || evacuation.status === "DELIVERED";
+  const canDeliver = evacuation.status === "ACTIVE" && hasRequiredFields && hasPhotos && !isClosed;
+  const canClose = evacuation.status === "DELIVERED" && hasRequiredFields && hasPhotos;
 
   return (
     <div className="dor-stripes min-h-screen">
@@ -351,8 +406,18 @@ export default function EvacuationPage() {
         <section className="dor-card p-5">
           <h2 className="font-semibold">Тикет эвакуации</h2>
           <p className="text-xs text-[var(--dor-muted)]">
-            Статус: <strong>{evacuation.status}</strong>
+            Статус: <strong>{STATUS_RU[evacuation.status] ?? evacuation.status}</strong>
           </p>
+          <div className="mt-3 rounded-xl border border-[var(--dor-border)] bg-[var(--dor-surface)]/50 p-3 text-sm">
+            <p className="font-medium">Порядок действий</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-[var(--dor-muted)]">
+              <li>Сохраните данные эвакуации.</li>
+              <li>Отметьте точку на карте и нажмите «Создать тикет».</li>
+              <li>Сделайте фото и загрузите их в тикет.</li>
+              <li>Нажмите «Старт перевозки» (статус «В пути»).</li>
+              <li>По прибытии нажмите «Сдал на штрафстоянку».</li>
+            </ol>
+          </div>
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div className="md:col-span-2">
               <label className="text-xs text-[var(--dor-muted)]">Номер</label>
@@ -360,6 +425,15 @@ export default function EvacuationPage() {
                 id="ev-plate"
                 defaultValue={evacuation.plate}
                 className="mt-1 w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 font-mono outline-none"
+              />
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-[var(--dor-muted)]">Никнейм владельца ТС</label>
+              <input
+                id="ev-owner"
+                defaultValue={evacuation.ownerNickname ?? ""}
+                className="mt-1 w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-night)] px-3 py-2 outline-none"
+                placeholder="Например: John_Doe"
               />
             </div>
             <div className="md:col-span-2">
@@ -383,6 +457,23 @@ export default function EvacuationPage() {
               />
             </div>
           </div>
+          <div className="mt-4">
+            <p className="mb-2 text-xs text-[var(--dor-muted)]">
+              Точка эвакуации (клик по карте):{" "}
+              {pickedLat != null && pickedLng != null
+                ? `${Math.round(pickedLat)}, ${Math.round(pickedLng)}`
+                : "не выбрана"}
+            </p>
+            <MapClient
+              heightClass="h-[280px] md:h-[360px]"
+              initialLat={evacuation.pickupLat ?? undefined}
+              initialLng={evacuation.pickupLng ?? undefined}
+              onPick={(lat, lng) => {
+                setPickedLat(lat);
+                setPickedLng(lng);
+              }}
+            />
+          </div>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
@@ -390,27 +481,45 @@ export default function EvacuationPage() {
               className="dor-btn-secondary text-sm"
               onClick={saveFields}
             >
-              Сохранить поля
+              1) Сохранить
             </button>
-            <label className="dor-btn-primary cursor-pointer text-sm">
-              Загрузить фото
-              <input type="file" accept="image/*" multiple className="hidden" onChange={onPhotos} />
+            <button
+              type="button"
+              disabled={busy || !canCreateTicket}
+              className="dor-btn-primary text-sm"
+              onClick={createTicket}
+              title={!canCreateTicket ? "Нужно сохранить поля и отметить точку на карте" : undefined}
+            >
+              2) Создать тикет
+            </button>
+            <label className={`dor-btn-primary text-sm ${!canUploadPhotos || busy ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
+              3) Загрузить фото
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={onPhotos}
+                disabled={!canUploadPhotos || busy}
+              />
             </label>
             <button
               type="button"
-              disabled={busy || evacuation.status === "CLOSED"}
+              disabled={busy || !canDeliver}
               className="dor-btn-secondary text-sm"
               onClick={deliver}
+              title={!canDeliver ? "Нужно: сохранить данные и добавить минимум одно фото" : undefined}
             >
-              Сдал на штрафстоянку (доставлено)
+              4) Старт перевозки
             </button>
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || !canClose}
               className="dor-btn-primary text-sm"
               onClick={closeTicket}
+              title={!canClose ? "Доступно только после шага «Старт перевозки»" : undefined}
             >
-              Закрыть эвакуацию
+              5) Сдал на штрафстоянку
             </button>
           </div>
           {msg ? <p className="mt-3 text-sm text-[var(--dor-muted)]">{msg}</p> : null}

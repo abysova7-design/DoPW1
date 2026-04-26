@@ -26,6 +26,11 @@ type Worker = {
     createdAt: string;
     label: string | null;
   } | null;
+  activeEvacuation: {
+    id: string;
+    status: string;
+    plate: string;
+  } | null;
 };
 
 type Call = {
@@ -142,8 +147,14 @@ export default function DispatchPage() {
         lat: w.lastPing!.lat,
         lng: w.lastPing!.lng,
         stale,
+        evacuating: Boolean(w.activeEvacuation),
       };
     });
+  const activeEvacuations = workers.filter((w) => w.activeEvacuation);
+  const EVAC_STATUS_RU: Record<string, string> = {
+    ACTIVE: "Ведется эвакуация",
+    DELIVERED: "В пути",
+  };
 
   if (!me) {
     return (
@@ -186,6 +197,36 @@ export default function DispatchPage() {
         </section>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          <section className="dor-card p-5 lg:col-span-2">
+            <h2 className="font-semibold">🚛 Активные эвакуации</h2>
+            <div className="mt-3 space-y-2">
+              {activeEvacuations.length === 0 ? (
+                <p className="text-sm text-[var(--dor-muted)]">Сейчас активных эвакуаций нет.</p>
+              ) : (
+                activeEvacuations.map((w) => (
+                  <div
+                    key={w.activeEvacuation!.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-500/35 bg-blue-500/5 p-3"
+                  >
+                    <div>
+                      <div className="font-medium">
+                        {w.user.displayName ?? w.user.nickname} · {w.activeEvacuation!.plate || "без номера"}
+                      </div>
+                      <p className="text-xs text-[var(--dor-muted)]">
+                        Статус: {EVAC_STATUS_RU[w.activeEvacuation!.status] ?? w.activeEvacuation!.status}
+                      </p>
+                    </div>
+                    <Link
+                      href={`/dashboard/dispatch/evacuation/${w.activeEvacuation!.id}`}
+                      className="dor-btn-secondary text-xs"
+                    >
+                      Открыть карточку
+                    </Link>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
           <section className="dor-card p-5">
             <h2 className="font-semibold">На смене ({workers.length})</h2>
             <ul className="mt-3 space-y-2">
@@ -349,6 +390,7 @@ export default function DispatchPage() {
 type EvacRecord = {
   id: string;
   plate: string;
+  ownerNickname: string | null;
   violation: string;
   description: string | null;
   status: string;
@@ -388,8 +430,8 @@ function EvacDatabase() {
   };
   const STATUS_RU: Record<string, string> = {
     CLOSED: "Закрыта",
-    DELIVERED: "На штрафстоянке",
-    ACTIVE: "Активна",
+    DELIVERED: "В пути",
+    ACTIVE: "Ведется эвакуация",
     DRAFT: "Черновик",
   };
 
@@ -439,6 +481,11 @@ function EvacDatabase() {
                     <div className="mt-0.5 truncate text-xs text-[var(--dor-muted)]">
                       {ev.violation || "—"}
                     </div>
+                    {ev.ownerNickname && (
+                      <div className="mt-0.5 truncate text-xs text-[var(--dor-muted)]">
+                        Владелец: {ev.ownerNickname}
+                      </div>
+                    )}
                   </div>
                   <div className="shrink-0 text-right text-xs text-[var(--dor-muted)]">
                     <div>{new Date(ev.createdAt).toLocaleDateString("ru-RU")}</div>

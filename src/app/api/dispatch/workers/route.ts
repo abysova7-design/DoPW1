@@ -27,6 +27,17 @@ export async function GET() {
   });
 
   const workerIds = activeShifts.map((s) => s.userId);
+  const activeEvacuations = await prisma.evacuation.findMany({
+    where: {
+      userId: { in: workerIds },
+      status: { in: ["ACTIVE", "DELIVERED"] },
+      closedAt: null,
+    },
+    select: { userId: true, status: true, plate: true, id: true },
+  });
+  const activeEvacMap = Object.fromEntries(
+    activeEvacuations.map((e) => [e.userId, e]),
+  );
   const lastPings = await Promise.all(
     workerIds.map((id) =>
       prisma.locationPing.findFirst({
@@ -45,6 +56,7 @@ export async function GET() {
     shiftStartedAt: s.startedAt,
     user: s.user,
     lastPing: pingMap[s.userId] ?? null,
+    activeEvacuation: activeEvacMap[s.userId] ?? null,
   }));
 
   return NextResponse.json({ workers });

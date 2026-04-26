@@ -40,23 +40,54 @@ export async function PATCH(
       data: {
         plate: v.plate,
         description: [v.model, v.notes].filter(Boolean).join(" — ") || null,
-        status: ev.status === "DRAFT" ? "ACTIVE" : ev.status,
       },
     });
     return NextResponse.json({ evacuation: updated });
   }
 
-  if (typeof body.plate === "string" || typeof body.violation === "string") {
+  if (
+    typeof body.plate === "string" ||
+    typeof body.violation === "string" ||
+    typeof body.pickupLat === "number" ||
+    typeof body.pickupLng === "number" ||
+    typeof body.ownerNickname === "string"
+  ) {
     const updated = await prisma.evacuation.update({
       where: { id },
       data: {
         ...(typeof body.plate === "string" ? { plate: body.plate } : {}),
+        ...(typeof body.ownerNickname === "string"
+          ? { ownerNickname: body.ownerNickname }
+          : {}),
+        ...(typeof body.pickupLat === "number" ? { pickupLat: body.pickupLat } : {}),
+        ...(typeof body.pickupLng === "number" ? { pickupLng: body.pickupLng } : {}),
         ...(typeof body.violation === "string" ? { violation: body.violation } : {}),
         ...(typeof body.description === "string"
           ? { description: body.description }
           : {}),
-        status: ev.status === "DRAFT" ? "ACTIVE" : ev.status,
       },
+    });
+    return NextResponse.json({ evacuation: updated });
+  }
+
+  if (body.action === "createTicket") {
+    const pickupLat = (ev as { pickupLat?: number | null }).pickupLat;
+    const pickupLng = (ev as { pickupLng?: number | null }).pickupLng;
+    if (!ev.plate || !ev.violation) {
+      return NextResponse.json(
+        { error: "Заполните номер и нарушение, затем сохраните" },
+        { status: 400 },
+      );
+    }
+    if (pickupLat == null || pickupLng == null) {
+      return NextResponse.json(
+        { error: "Отметьте точку эвакуации на карте" },
+        { status: 400 },
+      );
+    }
+    const updated = await prisma.evacuation.update({
+      where: { id },
+      data: { status: "ACTIVE" as EvacuationStatus },
     });
     return NextResponse.json({ evacuation: updated });
   }
@@ -72,6 +103,18 @@ export async function PATCH(
   }
 
   if (body.action === "deliver") {
+    if (!ev.plate || !ev.violation) {
+      return NextResponse.json(
+        { error: "Сначала заполните номер и нарушение" },
+        { status: 400 },
+      );
+    }
+    if (parsePhotos(ev.photoUrls).length < 1) {
+      return NextResponse.json(
+        { error: "Сначала загрузите хотя бы одно фото" },
+        { status: 400 },
+      );
+    }
     const updated = await prisma.evacuation.update({
       where: { id },
       data: { status: "DELIVERED" as EvacuationStatus },
@@ -80,6 +123,12 @@ export async function PATCH(
   }
 
   if (body.action === "close") {
+    if (ev.status !== "DELIVERED") {
+      return NextResponse.json(
+        { error: "Сначала начните перевозку (статус «В пути»)" },
+        { status: 400 },
+      );
+    }
     if (!ev.plate || !ev.violation) {
       return NextResponse.json(
         { error: "Заполните номер и нарушение" },
@@ -115,6 +164,14 @@ export async function PATCH(
         data: { endedAt: new Date() },
       });
     }
+    await prisma.locationPing.create({
+      data: {
+        userId: user.id,
+        lat: 1794,
+        lng: 4151,
+        label: "Штрафстоянка",
+      },
+    });
 
     return NextResponse.json({ evacuation: updated, xpGain: gain, xp, level });
   }

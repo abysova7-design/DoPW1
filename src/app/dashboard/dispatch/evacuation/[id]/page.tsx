@@ -9,8 +9,8 @@ import { RANK_LABELS, type PositionRank } from "@/lib/positions";
 
 const STATUS_RU: Record<string, string> = {
   DRAFT: "Черновик",
-  ACTIVE: "Активна",
-  DELIVERED: "На штрафстоянке",
+  ACTIVE: "Ведется эвакуация",
+  DELIVERED: "В пути",
   CLOSED: "Закрыта",
 };
 const STATUS_COLOR: Record<string, string> = {
@@ -23,6 +23,7 @@ const STATUS_COLOR: Record<string, string> = {
 type Evac = {
   id: string;
   plate: string;
+  ownerNickname: string | null;
   violation: string;
   description: string | null;
   status: string;
@@ -89,6 +90,7 @@ export default function EvacDetailPage() {
         <section className="dor-card divide-y divide-[var(--dor-border)] overflow-hidden">
           {[
             ["Сотрудник", `${evac.user.displayName ?? evac.user.nickname} · ${RANK_LABELS[evac.user.positionRank]}`],
+            ["Никнейм владельца", evac.ownerNickname || "—"],
             ["Нарушение", evac.violation || "—"],
             ["Описание / RP", evac.description || "—"],
             ["Создана", new Date(evac.createdAt).toLocaleString("ru-RU")],
