@@ -3,7 +3,11 @@ import { randomUUID } from "crypto";
 import { NotificationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
+import { publicAssistanceSchemaReady } from "@/lib/public-assistance-schema";
 import { CIVIC_CATEGORY_LABELS, isCivicCategory } from "@/lib/civic-help";
+
+const SCHEMA_MSG =
+  "База не обновлена: на сервере выполните npx prisma db push && npx prisma generate.";
 
 export async function PATCH(
   req: Request,
@@ -13,6 +17,10 @@ export async function PATCH(
   if (!user) return NextResponse.json({ error: "Нет доступа" }, { status: 401 });
   if (!user.isDispatcher && !user.isAdmin) {
     return NextResponse.json({ error: "Только диспетчеры" }, { status: 403 });
+  }
+
+  if (!(await publicAssistanceSchemaReady())) {
+    return NextResponse.json({ error: SCHEMA_MSG }, { status: 503 });
   }
 
   const { id } = await ctx.params;
@@ -30,11 +38,16 @@ export async function PATCH(
     if (civic.status !== "OPEN") {
       return NextResponse.json({ error: "Уже обработано" }, { status: 400 });
     }
-    await prisma.publicAssistanceRequest.update({
-      where: { id },
-      data: { status: "CANCELLED" },
-    });
-    return NextResponse.json({ ok: true });
+    try {
+      await prisma.publicAssistanceRequest.update({
+        where: { id },
+        data: { status: "CANCELLED" },
+      });
+      return NextResponse.json({ ok: true });
+    } catch (e) {
+      console.error("[public-assistance] PATCH cancel", e);
+      return NextResponse.json({ error: SCHEMA_MSG }, { status: 503 });
+    }
   }
 
   if (action === "assign") {
@@ -60,41 +73,46 @@ export async function PATCH(
 
     const callId = randomUUID();
 
-    const result = await prisma.$transaction(async (tx) => {
-      const call = await tx.dispatchCall.create({
-        data: {
-          id: callId,
-          creatorId: user.id,
-          targetId: employeeUserId,
-          title,
-          body: callBody,
-          lat: civic.lat,
-          lng: civic.lng,
-        },
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        const call = await tx.dispatchCall.create({
+          data: {
+            id: callId,
+            creatorId: user.id,
+            targetId: employeeUserId,
+            title,
+            body: callBody,
+            lat: civic.lat,
+            lng: civic.lng,
+          },
+        });
+
+        await tx.publicAssistanceRequest.update({
+          where: { id },
+          data: {
+            status: "ASSIGNED",
+            assignedUserId: employeeUserId,
+            dispatchCallId: call.id,
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: employeeUserId,
+            type: NotificationType.DISPATCH,
+            title: `📡 Диспетчер: ${title}`,
+            body: callBody,
+          },
+        });
+
+        return call;
       });
 
-      await tx.publicAssistanceRequest.update({
-        where: { id },
-        data: {
-          status: "ASSIGNED",
-          assignedUserId: employeeUserId,
-          dispatchCallId: call.id,
-        },
-      });
-
-      await tx.notification.create({
-        data: {
-          userId: employeeUserId,
-          type: NotificationType.DISPATCH,
-          title: `📡 Диспетчер: ${title}`,
-          body: callBody,
-        },
-      });
-
-      return call;
-    });
-
-    return NextResponse.json({ ok: true, dispatchCallId: result.id });
+      return NextResponse.json({ ok: true, dispatchCallId: result.id });
+    } catch (e) {
+      console.error("[public-assistance] PATCH assign", e);
+      return NextResponse.json({ error: SCHEMA_MSG }, { status: 503 });
+    }
   }
 
   return NextResponse.json({ error: "Неизвестное действие" }, { status: 400 });

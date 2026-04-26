@@ -2,10 +2,14 @@ import { NextResponse } from "next/server";
 import { NotificationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireUser } from "@/lib/auth-server";
+import { publicAssistanceSchemaReady } from "@/lib/public-assistance-schema";
 import {
   CIVIC_CATEGORY_LABELS,
   isCivicCategory,
 } from "@/lib/civic-help";
+
+const SCHEMA_HINT =
+  "Администратору сервера: в каталоге проекта выполните npx prisma db push && npx prisma generate и перезапустите приложение.";
 
 /** Публичная статистика: смены без даты окончания */
 export async function GET(req: Request) {
@@ -25,13 +29,29 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Только диспетчеры" }, { status: 403 });
   }
 
-  const requests = await prisma.publicAssistanceRequest.findMany({
-    where: { status: "OPEN" },
-    orderBy: { createdAt: "desc" },
-    take: 40,
-  });
+  if (!(await publicAssistanceSchemaReady())) {
+    return NextResponse.json({
+      requests: [],
+      schemaPending: true,
+      hint: SCHEMA_HINT,
+    });
+  }
 
-  return NextResponse.json({ requests });
+  try {
+    const requests = await prisma.publicAssistanceRequest.findMany({
+      where: { status: "OPEN" },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    });
+    return NextResponse.json({ requests });
+  } catch (e) {
+    console.error("[public-assistance] GET list", e);
+    return NextResponse.json({
+      requests: [],
+      schemaPending: true,
+      hint: SCHEMA_HINT,
+    });
+  }
 }
 
 /** Создание обращения с сайта (без авторизации) */
@@ -69,37 +89,61 @@ export async function POST(req: Request) {
     );
   }
 
-  const catLabel = CIVIC_CATEGORY_LABELS[category];
-  const request = await prisma.publicAssistanceRequest.create({
-    data: {
-      fullName,
-      category,
-      description,
-      phone,
-      lat,
-      lng,
-      status: "OPEN",
-    },
-  });
-
-  const dispatchers = await prisma.user.findMany({
-    where: { OR: [{ isDispatcher: true }, { isAdmin: true }] },
-    select: { id: true },
-  });
-
-  const title = `🆘 Гражданин: ${catLabel}`;
-  const notifBody = `${fullName} · ${phone}\n${description.slice(0, 500)}${description.length > 500 ? "…" : ""}`;
-
-  if (dispatchers.length > 0) {
-    await prisma.notification.createMany({
-      data: dispatchers.map((u) => ({
-        userId: u.id,
-        type: NotificationType.CIVIC_HELP,
-        title,
-        body: notifBody,
-      })),
-    });
+  if (!(await publicAssistanceSchemaReady())) {
+    return NextResponse.json(
+      {
+        error: `Сервис временно недоступен. ${SCHEMA_HINT}`,
+      },
+      { status: 503 },
+    );
   }
 
-  return NextResponse.json({ ok: true, id: request.id });
+  const catLabel = CIVIC_CATEGORY_LABELS[category];
+
+  try {
+    const request = await prisma.publicAssistanceRequest.create({
+      data: {
+        fullName,
+        category,
+        description,
+        phone,
+        lat,
+        lng,
+        status: "OPEN",
+      },
+    });
+
+    const dispatchers = await prisma.user.findMany({
+      where: { OR: [{ isDispatcher: true }, { isAdmin: true }] },
+      select: { id: true },
+    });
+
+    const title = `🆘 Гражданин: ${catLabel}`;
+    const notifBody = `${fullName} · ${phone}\n${description.slice(0, 500)}${description.length > 500 ? "…" : ""}`;
+
+    if (dispatchers.length > 0) {
+      try {
+        await prisma.notification.createMany({
+          data: dispatchers.map((u) => ({
+            userId: u.id,
+            type: NotificationType.CIVIC_HELP,
+            title,
+            body: notifBody,
+          })),
+        });
+      } catch (notifErr) {
+        console.error("[public-assistance] createMany notifications", notifErr);
+      }
+    }
+
+    return NextResponse.json({ ok: true, id: request.id });
+  } catch (e) {
+    console.error("[public-assistance] POST", e);
+    return NextResponse.json(
+      {
+        error: `Не удалось сохранить обращение. ${SCHEMA_HINT}`,
+      },
+      { status: 503 },
+    );
+  }
 }
