@@ -48,12 +48,16 @@ type Call = {
   createdAt: string;
   creator: { nickname: string; displayName: string | null };
   target: { nickname: string; displayName: string | null } | null;
+  reportText?: string | null;
+  reportAt?: string | null;
+  reportBy?: { nickname: string; displayName: string | null } | null;
 };
 
 const STATUS_LABEL: Record<string, string> = {
   OPEN: "Открыт",
   ACCEPTED: "Принят",
   ONSITE: "На месте",
+  REPORTED: "Отчёт отправлен",
   DONE: "Выполнен",
   CANCELLED: "Отменён",
 };
@@ -62,6 +66,7 @@ const STATUS_COLOR: Record<string, string> = {
   OPEN: "text-[var(--dor-orange)]",
   ACCEPTED: "text-[var(--dor-green-bright)]",
   ONSITE: "text-blue-400",
+  REPORTED: "text-purple-400",
   DONE: "text-[var(--dor-muted)]",
   CANCELLED: "text-red-400",
 };
@@ -86,7 +91,7 @@ export default function DispatchPage() {
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/auth/me");
+    const r = await fetch("/api/auth/me", { cache: "no-store" });
     const d = await r.json();
     if (!d.user) { router.replace("/login"); return; }
     if (!d.user.isDispatcher && !d.user.isAdmin) {
@@ -95,20 +100,28 @@ export default function DispatchPage() {
     }
     setMe(d.user);
 
-    const w = await fetch("/api/dispatch/workers");
+    const w = await fetch("/api/dispatch/workers", { cache: "no-store" });
     const wd = await w.json();
     setWorkers(wd.workers ?? []);
 
-    const c = await fetch("/api/dispatch");
+    const c = await fetch("/api/dispatch", { cache: "no-store" });
     const cd = await c.json();
     setCalls(cd.calls ?? []);
   }, [router]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    const t = setInterval(load, 15000);
+    const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [load]);
+  useEffect(() => {
+    function onDispatchUpdated(e: Event) {
+      const evt = e as CustomEvent<{ calls?: Call[] }>;
+      setCalls(evt.detail?.calls ?? []);
+    }
+    window.addEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
+    return () => window.removeEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
+  }, []);
 
   async function sendCall(e: React.FormEvent) {
     e.preventDefault();
@@ -159,7 +172,7 @@ export default function DispatchPage() {
     });
   const activeEvacuations = workers.filter((w) => w.activeEvacuation);
   const activeCallMarkers = calls
-    .filter((c) => (c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE") && c.lat != null && c.lng != null)
+    .filter((c) => (c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED") && c.lat != null && c.lng != null)
     .map((c) => ({ id: c.id, lat: c.lat as number, lng: c.lng as number, title: c.title }));
   const EVAC_STATUS_RU: Record<string, string> = {
     ACTIVE: "Ведется эвакуация",
@@ -372,15 +385,35 @@ export default function DispatchPage() {
                     )}
                     <span>{new Date(c.createdAt).toLocaleString("ru-RU")}</span>
                   </div>
-                  {c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" ? (
+                  {c.reportText && (
+                    <div className="mt-2 rounded-lg border border-purple-500/30 bg-purple-500/10 p-2 text-xs">
+                      <div className="font-semibold text-purple-300">
+                        Отчёт: {c.reportBy?.displayName ?? c.reportBy?.nickname ?? "сотрудник"}
+                        {c.reportAt ? ` · ${new Date(c.reportAt).toLocaleString("ru-RU")}` : ""}
+                      </div>
+                      <div className="mt-1 text-[var(--dor-muted)]">{c.reportText}</div>
+                    </div>
+                  )}
+                  {c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED" ? (
                     <div className="mt-2 flex gap-2">
-                      <button
-                        type="button"
-                        className="dor-btn-primary text-xs"
-                        onClick={() => patchCall(c.id, "done")}
-                      >
-                        Выполнен
-                      </button>
+                      {c.status === "REPORTED" && (
+                        <>
+                          <button
+                            type="button"
+                            className="dor-btn-primary text-xs"
+                            onClick={() => patchCall(c.id, "done")}
+                          >
+                            Закрыть вызов
+                          </button>
+                          <button
+                            type="button"
+                            className="dor-btn-secondary text-xs"
+                            onClick={() => patchCall(c.id, "reopen")}
+                          >
+                            Нужна подмога
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         className="dor-btn-secondary text-xs"

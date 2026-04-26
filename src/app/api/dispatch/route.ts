@@ -8,10 +8,10 @@ export async function GET() {
 
   const where =
     user.isDispatcher || user.isAdmin
-      ? { status: { in: ["OPEN", "ACCEPTED", "ONSITE"] } }
+      ? { status: { in: ["OPEN", "ACCEPTED", "ONSITE", "REPORTED"] } }
       : {
           OR: [
-            { targetId: null, status: { in: ["OPEN", "ACCEPTED", "ONSITE"] } },
+            { targetId: null, status: { in: ["OPEN", "ACCEPTED", "ONSITE", "REPORTED"] } },
             { targetId: user.id },
           ],
         };
@@ -21,6 +21,7 @@ export async function GET() {
     include: {
       creator: { select: { nickname: true, displayName: true } },
       target: { select: { nickname: true, displayName: true } },
+      reportBy: { select: { nickname: true, displayName: true } },
     },
     orderBy: { createdAt: "desc" },
     take: 40,

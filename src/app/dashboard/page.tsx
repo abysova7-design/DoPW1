@@ -49,6 +49,7 @@ type DispatchCall = {
   createdAt: string;
   creator: { nickname: string };
   targetId?: string | null;
+  reportText?: string | null;
 };
 
 export default function DashboardPage() {
@@ -59,6 +60,8 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"main" | "vehicles" | "discipline">("main");
   const [focusCallPoint, setFocusCallPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [reportingCall, setReportingCall] = useState<DispatchCall | null>(null);
+  const [reportText, setReportText] = useState("");
   const pingSectionRef = useRef<HTMLDivElement>(null);
   const knownCallIdsRef = useRef<Set<string>>(new Set());
 
@@ -161,7 +164,7 @@ export default function DashboardPage() {
     refresh();
   }
 
-  async function respondCall(call: DispatchCall, action: "accept" | "onsite" | "done") {
+  async function respondCall(call: DispatchCall, action: "accept" | "onsite") {
     const r = await fetch(`/api/dispatch/${call.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -178,6 +181,19 @@ export default function DashboardPage() {
       setFocusCallPoint({ lat: call.lat, lng: call.lng });
       setTab("main");
     }
+    refresh();
+  }
+
+  async function submitReport() {
+    if (!reportingCall) return;
+    const r = await fetch(`/api/dispatch/${reportingCall.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "report", reportText }),
+    });
+    if (!r.ok) return;
+    setReportingCall(null);
+    setReportText("");
     refresh();
   }
 
@@ -296,7 +312,13 @@ export default function DashboardPage() {
                   )}
                   {c.status === "ONSITE" && (
                     <button type="button" className="dor-btn-secondary text-xs"
-                      onClick={() => respondCall(c, "done")}>Выполнено</button>
+                      onClick={() => {
+                        setReportingCall(c);
+                        setReportText("");
+                      }}
+                    >
+                      Выполнено
+                    </button>
                   )}
                   {c.lat != null && c.lng != null && (
                     <button
@@ -313,6 +335,41 @@ export default function DashboardPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {reportingCall && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4">
+            <div className="w-full max-w-lg rounded-2xl border border-[var(--dor-border)] bg-[var(--dor-night)] p-4">
+              <h3 className="text-base font-semibold">Отчёт по вызову</h3>
+              <p className="mt-1 text-xs text-[var(--dor-muted)]">
+                {reportingCall.title}
+              </p>
+              <textarea
+                className="mt-3 w-full rounded-xl border border-[var(--dor-border)] bg-[var(--dor-surface)] px-3 py-2 text-sm outline-none"
+                rows={6}
+                value={reportText}
+                onChange={(e) => setReportText(e.target.value)}
+                placeholder="Что произошло, что было сделано, итог..."
+              />
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="dor-btn-secondary text-sm"
+                  onClick={() => setReportingCall(null)}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  className="dor-btn-primary text-sm"
+                  disabled={reportText.trim().length < 8}
+                  onClick={submitReport}
+                >
+                  Отправить отчёт
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

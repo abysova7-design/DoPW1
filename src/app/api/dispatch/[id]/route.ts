@@ -28,16 +28,35 @@ export async function PATCH(
   }
 
   if (action === "done") {
-    if (
-      call.targetId !== user.id &&
-      !user.isDispatcher &&
-      !user.isAdmin
-    ) {
+    if (!user.isDispatcher && !user.isAdmin) {
       return NextResponse.json({ error: "Нет прав" }, { status: 403 });
     }
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "DONE", closedAt: new Date() },
+    });
+    return NextResponse.json({ call: updated });
+  }
+
+  if (action === "report") {
+    if (call.targetId !== user.id && !user.isDispatcher && !user.isAdmin) {
+      return NextResponse.json({ error: "Нет прав" }, { status: 403 });
+    }
+    const reportText = String(body?.reportText ?? "").trim();
+    if (reportText.length < 8) {
+      return NextResponse.json(
+        { error: "Опишите результат подробнее (минимум 8 символов)" },
+        { status: 400 },
+      );
+    }
+    const updated = await prisma.dispatchCall.update({
+      where: { id },
+      data: {
+        status: "REPORTED",
+        reportText: reportText.slice(0, 2000),
+        reportAt: new Date(),
+        reportById: user.id,
+      },
     });
     return NextResponse.json({ call: updated });
   }
@@ -74,6 +93,22 @@ export async function PATCH(
     const updated = await prisma.dispatchCall.update({
       where: { id },
       data: { status: "CANCELLED", closedAt: new Date() },
+    });
+    return NextResponse.json({ call: updated });
+  }
+
+  if (action === "reopen") {
+    if (!user.isDispatcher && !user.isAdmin) {
+      return NextResponse.json({ error: "Нет прав" }, { status: 403 });
+    }
+    const updated = await prisma.dispatchCall.update({
+      where: { id },
+      data: {
+        status: "OPEN",
+        reportText: null,
+        reportAt: null,
+        reportById: null,
+      },
     });
     return NextResponse.json({ call: updated });
   }

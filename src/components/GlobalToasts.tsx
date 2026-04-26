@@ -85,7 +85,7 @@ export function GlobalToasts() {
     if (!r?.ok) return;
     const d = await safeJson<{ calls?: DispatchCall[] }>(r, {});
     const calls = (d.calls ?? []).filter((c) =>
-      c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
+      c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED",
     );
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("dopw:dispatch-updated", { detail: { calls } }));
@@ -109,7 +109,7 @@ export function GlobalToasts() {
       .then((r) => safeJson<{ calls?: DispatchCall[] }>(r, {}))
       .then((d) => {
         const calls = (d.calls ?? []).filter((c) =>
-          c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
+          c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE" || c.status === "REPORTED",
         );
         calls.forEach((c) => prevDispatchIds.current.add(c.id));
       })
