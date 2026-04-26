@@ -126,6 +126,8 @@ export type CheckpointMarker = {
   /** id стационарного поста из PATROL_CHECKPOINTS (1–3) */
   stationaryCheckpointId?: number;
   occupants?: { nickname: string; displayName?: string | null }[];
+  /** Временный КП: убрать маркер с карты */
+  onClearTemp?: () => void;
 };
 
 export type CheckpointMapActions = {
@@ -263,7 +265,11 @@ export function DispatchMap({
                 <div className="min-w-[168px] space-y-2 text-sm text-[var(--dor-text)]">
                   <div>
                     <div className="font-semibold">{cp.label}</div>
-                    {variant === "temp" ? null : occ.length > 0 ? (
+                    {variant === "temp" ? (
+                      <p className="mt-1 text-xs text-[var(--dor-muted)]">
+                        Метка для коллег и диспетчера. Можно снять кнопкой ниже.
+                      </p>
+                    ) : occ.length > 0 ? (
                       <div className="mt-1 text-xs text-[var(--dor-muted)]">
                         На посту: {occ.map((o) => o.displayName ?? o.nickname).join(", ")}
                       </div>
@@ -271,6 +277,17 @@ export function DispatchMap({
                       <div className="mt-1 text-xs text-[var(--dor-muted)]">Пост свободен</div>
                     )}
                   </div>
+                  {variant === "temp" && cp.onClearTemp ? (
+                    <div className="border-t border-[var(--dor-border)] pt-2">
+                      <button
+                        type="button"
+                        className="w-full rounded-lg bg-[var(--dor-surface)] px-2 py-1.5 text-xs font-medium hover:opacity-90"
+                        onClick={() => cp.onClearTemp?.()}
+                      >
+                        Снять временный КП с карты
+                      </button>
+                    </div>
+                  ) : null}
                   {checkpointActions && cp.stationaryCheckpointId != null ? (
                     <div className="flex flex-col gap-1 border-t border-[var(--dor-border)] pt-2">
                       {checkpointActions.myCheckpointId === cp.stationaryCheckpointId ? (

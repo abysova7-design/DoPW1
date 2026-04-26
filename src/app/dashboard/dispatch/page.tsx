@@ -352,6 +352,7 @@ export default function DispatchPage() {
   const patrolReportMapMarkers = patrolReports
     .filter(
       (r) =>
+        r.status !== "APPROVED" &&
         r.lat != null &&
         r.lng != null &&
         Number.isFinite(r.lat) &&

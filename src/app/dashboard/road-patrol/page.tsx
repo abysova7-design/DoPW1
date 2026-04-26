@@ -420,6 +420,7 @@ export default function RoadPatrolPage() {
   const patrolReportMapMarkers = myReports
     .filter(
       (r) =>
+        r.status !== "APPROVED" &&
         r.lat != null &&
         r.lng != null &&
         Number.isFinite(r.lat) &&
@@ -456,6 +457,7 @@ export default function RoadPatrolPage() {
             lng: tempCp.lng,
             label: "Временный блок-пост",
             variant: "temp" as const,
+            onClearTemp: () => setTempCp(null),
           },
         ]
       : []),
@@ -552,15 +554,6 @@ export default function RoadPatrolPage() {
                 >
                   Перекрытие на карте (клик)
                 </button>
-                {tempCp ? (
-                  <button
-                    type="button"
-                    className="text-xs text-red-400 underline"
-                    onClick={() => setTempCp(null)}
-                  >
-                    Сбросить КП
-                  </button>
-                ) : null}
               </div>
               <p className="mt-2 text-xs text-[var(--dor-muted)]">
                 {pickMode === "temp"
@@ -599,44 +592,99 @@ export default function RoadPatrolPage() {
                   }}
                 />
               </div>
-              <div className="mt-4 border-t border-[var(--dor-border)] pt-3">
-                <h4 className="text-xs font-semibold text-[var(--dor-text)]">Активные перекрытия</h4>
-                {closures.length === 0 ? (
-                  <p className="mt-1 text-[11px] text-[var(--dor-muted)]">Нет меток — дорога свободна по данным патруля.</p>
-                ) : (
-                  <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto text-[11px]">
-                    {closures.map((c) => {
-                      const canRemove =
-                        me.id === c.authorId || me.isDispatcher || me.isAdmin;
-                      return (
-                        <li
-                          key={c.id}
-                          className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)]/80 px-2 py-2"
+              <div className="mt-4 border-t border-[var(--dor-border)] pt-4">
+                <h3 className="text-sm font-semibold text-[var(--dor-text)]">Активные маркеры</h3>
+                <p className="mt-1 text-[11px] text-[var(--dor-muted)]">
+                  То, что сейчас отображается на карте: временный КП, точка для следующего отчёта и перекрытия.
+                </p>
+
+                <div className="mt-3 space-y-4">
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--dor-text)]">Временный блок-пост</h4>
+                    {tempCp ? (
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-purple-500/30 bg-purple-500/5 px-2 py-2 text-[11px]">
+                        <span className="text-[var(--dor-muted)]">
+                          {Math.round(tempCp.lat)}, {Math.round(tempCp.lng)} · фиолетовый ромб на карте
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-md border border-purple-400/50 bg-[var(--dor-night)] px-2 py-1 text-[10px] font-medium text-purple-200 hover:bg-purple-950/40"
+                          onClick={() => setTempCp(null)}
                         >
-                          <div>
-                            <div className="font-medium text-[var(--dor-text)]">⛔ {c.title}</div>
-                            <div className="text-[var(--dor-muted)]">
-                              {c.author.displayName ?? c.author.nickname} · {Math.round(c.lat)},{" "}
-                              {Math.round(c.lng)}
-                            </div>
-                            {c.description ? (
-                              <p className="mt-0.5 text-[var(--dor-muted)]">{c.description}</p>
-                            ) : null}
-                          </div>
-                          {canRemove ? (
-                            <button
-                              type="button"
-                              className="shrink-0 text-[10px] text-red-400 underline"
-                              onClick={() => closeClosureRow(c.id)}
+                          Сбросить с карты
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--dor-muted)]">
+                        Не поставлен — включите режим выше и кликните по карте.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--dor-text)]">Точка для отчёта</h4>
+                    {reportPick ? (
+                      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--dor-orange)]/35 bg-[var(--dor-orange)]/5 px-2 py-2 text-[11px]">
+                        <span className="text-[var(--dor-muted)]">
+                          {Math.round(reportPick.lat)}, {Math.round(reportPick.lng)} · зелёная метка на карте
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 rounded-md border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-1 text-[10px] font-medium hover:border-[var(--dor-orange)]"
+                          onClick={() => setReportPick(null)}
+                        >
+                          Сбросить точку
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-[11px] text-[var(--dor-muted)]">
+                        Не задана — режим «Точка для отчёта», затем клик по карте.
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <h4 className="text-xs font-semibold text-[var(--dor-text)]">Активные перекрытия</h4>
+                    {closures.length === 0 ? (
+                      <p className="mt-1 text-[11px] text-[var(--dor-muted)]">
+                        Нет меток — дорога свободна по данным патруля.
+                      </p>
+                    ) : (
+                      <ul className="mt-2 max-h-36 space-y-2 overflow-y-auto text-[11px]">
+                        {closures.map((c) => {
+                          const canRemove =
+                            me.id === c.authorId || me.isDispatcher || me.isAdmin;
+                          return (
+                            <li
+                              key={c.id}
+                              className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)]/80 px-2 py-2"
                             >
-                              Снять
-                            </button>
-                          ) : null}
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                              <div>
+                                <div className="font-medium text-[var(--dor-text)]">⛔ {c.title}</div>
+                                <div className="text-[var(--dor-muted)]">
+                                  {c.author.displayName ?? c.author.nickname} · {Math.round(c.lat)},{" "}
+                                  {Math.round(c.lng)}
+                                </div>
+                                {c.description ? (
+                                  <p className="mt-0.5 text-[var(--dor-muted)]">{c.description}</p>
+                                ) : null}
+                              </div>
+                              {canRemove ? (
+                                <button
+                                  type="button"
+                                  className="shrink-0 text-[10px] text-red-400 underline"
+                                  onClick={() => closeClosureRow(c.id)}
+                                >
+                                  Снять
+                                </button>
+                              ) : null}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
