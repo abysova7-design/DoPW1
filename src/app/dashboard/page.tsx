@@ -64,9 +64,9 @@ export default function DashboardPage() {
 
   const refresh = useCallback(async () => {
     const [rme, rs, rdc] = await Promise.all([
-      fetch("/api/auth/me"),
-      fetch("/api/shift"),
-      fetch("/api/dispatch"),
+      fetch("/api/auth/me", { cache: "no-store" }),
+      fetch("/api/shift", { cache: "no-store" }),
+      fetch("/api/dispatch", { cache: "no-store" }),
     ]);
     const dme = await rme.json();
     if (!dme.user) { router.replace("/login"); return; }
@@ -97,6 +97,17 @@ export default function DashboardPage() {
     const t = setInterval(refresh, 30000);
     return () => clearInterval(t);
   }, [refresh]);
+  useEffect(() => {
+    function onDispatchUpdated(e: Event) {
+      const evt = e as CustomEvent<{ calls?: DispatchCall[] }>;
+      const calls = evt.detail?.calls ?? [];
+      setOpenCalls(
+        calls.filter((c) => c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE"),
+      );
+    }
+    window.addEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
+    return () => window.removeEventListener("dopw:dispatch-updated", onDispatchUpdated as EventListener);
+  }, []);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });

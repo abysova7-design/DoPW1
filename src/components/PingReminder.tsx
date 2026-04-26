@@ -63,8 +63,6 @@ export function PingReminder({
 
   useEffect(() => {
     if (focusLat == null || focusLng == null) return;
-    setLat(focusLat);
-    setLng(focusLng);
     setStatus("📍 Точка вызова установлена на карте. При необходимости отправьте новую отметку.");
   }, [focusLat, focusLng]);
 

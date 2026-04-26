@@ -5,6 +5,13 @@ import { playSound } from "@/lib/sounds";
 import { safeJson } from "@/lib/safe-fetch";
 
 type N = { id: string; title: string; body: string; type: string; read: boolean };
+type DispatchCall = {
+  id: string;
+  title: string;
+  body: string;
+  status: string;
+  createdAt: string;
+};
 
 const TYPE_ICON: Record<string, string> = {
   CALL_BASE: "📣",
@@ -27,6 +34,7 @@ const TYPE_COLOR: Record<string, string> = {
 export function GlobalToasts() {
   const [toasts, setToasts] = useState<(N & { key: number })[]>([]);
   const prevUnreadIds = useRef<Set<string>>(new Set());
+  const prevDispatchIds = useRef<Set<string>>(new Set());
   const counter = useRef(0);
 
   const dismiss = useCallback((key: number) => {
@@ -35,7 +43,7 @@ export function GlobalToasts() {
 
   const poll = useCallback(async () => {
     // Не опрашиваем, если нет сессии
-    const r = await fetch("/api/notifications").catch(() => null);
+    const r = await fetch("/api/notifications", { cache: "no-store" }).catch(() => null);
     if (!r?.ok) return;
     const d = await safeJson<{
       notifications?: N[];
@@ -72,18 +80,48 @@ export function GlobalToasts() {
     });
   }, [dismiss]);
 
+  const pollDispatch = useCallback(async () => {
+    const r = await fetch("/api/dispatch", { cache: "no-store" }).catch(() => null);
+    if (!r?.ok) return;
+    const d = await safeJson<{ calls?: DispatchCall[] }>(r, {});
+    const calls = (d.calls ?? []).filter((c) =>
+      c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
+    );
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("dopw:dispatch-updated", { detail: { calls } }));
+    }
+    const newCalls = calls.filter((c) => !prevDispatchIds.current.has(c.id));
+    if (newCalls.length > 0 && prevDispatchIds.current.size > 0) {
+      playSound("dispatch");
+    }
+    calls.forEach((c) => prevDispatchIds.current.add(c.id));
+  }, []);
+
   useEffect(() => {
-    fetch("/api/notifications")
+    fetch("/api/notifications", { cache: "no-store" })
       .then((r) => safeJson<{ notifications?: N[] }>(r, {}))
       .then((d) => {
         const items: N[] = d.notifications ?? [];
         items.forEach((n) => prevUnreadIds.current.add(n.id));
       })
       .catch(() => {});
+    fetch("/api/dispatch", { cache: "no-store" })
+      .then((r) => safeJson<{ calls?: DispatchCall[] }>(r, {}))
+      .then((d) => {
+        const calls = (d.calls ?? []).filter((c) =>
+          c.status === "OPEN" || c.status === "ACCEPTED" || c.status === "ONSITE",
+        );
+        calls.forEach((c) => prevDispatchIds.current.add(c.id));
+      })
+      .catch(() => {});
 
-    const t = setInterval(poll, 15000);
-    return () => clearInterval(t);
-  }, [poll]);
+    const t1 = setInterval(poll, 7000);
+    const t2 = setInterval(pollDispatch, 5000);
+    return () => {
+      clearInterval(t1);
+      clearInterval(t2);
+    };
+  }, [poll, pollDispatch]);
 
   if (toasts.length === 0) return null;
 
