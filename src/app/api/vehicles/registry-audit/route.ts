@@ -77,6 +77,7 @@ export async function GET() {
   const registryTimeline = audits.map((a) => ({
     id: `reg-${a.id}`,
     kind: "REGISTRY" as const,
+    evacuationId: null as string | null,
     at: a.createdAt.toISOString(),
     plate: a.vehicle.plate,
     model: a.vehicle.model,
@@ -89,6 +90,7 @@ export async function GET() {
   const evacTimeline = evacRows.map((e) => ({
     id: `evac-${e.id}`,
     kind: "EVACUATION" as const,
+    evacuationId: e.id,
     at: (e.closedAt as Date).toISOString(),
     plate: e.plate,
     model: null as string | null,

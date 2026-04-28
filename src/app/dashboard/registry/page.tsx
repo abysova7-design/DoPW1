@@ -38,6 +38,8 @@ type Stats = {
 type TimelineRow = {
   id: string;
   kind: "REGISTRY" | "EVACUATION";
+  /** Для закрытых эвакуаций — id для карточки в диспетчерской */
+  evacuationId: string | null;
   at: string;
   plate: string;
   model: string | null;
@@ -194,18 +196,28 @@ export default function RegistryHistoryPage() {
             <ul className="mt-4 divide-y divide-[var(--dor-border)]">
               {timeline.map((e) => (
                 <li key={e.id} className="flex flex-col gap-1 py-4 first:pt-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                        e.kind === "EVACUATION"
-                          ? "bg-blue-500/20 text-blue-200"
-                          : "bg-[var(--dor-orange)]/20 text-[var(--dor-orange)]"
-                      }`}
-                    >
-                      {e.kind === "EVACUATION" ? "Эвакуация" : "Реестр"}
-                    </span>
-                    <span className="font-mono font-semibold text-[var(--dor-text)]">{e.plate}</span>
-                    {e.model ? <span className="text-xs text-[var(--dor-muted)]">· {e.model}</span> : null}
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                          e.kind === "EVACUATION"
+                            ? "bg-blue-500/20 text-blue-200"
+                            : "bg-[var(--dor-orange)]/20 text-[var(--dor-orange)]"
+                        }`}
+                      >
+                        {e.kind === "EVACUATION" ? "Эвакуация" : "Реестр"}
+                      </span>
+                      <span className="font-mono font-semibold text-[var(--dor-text)]">{e.plate}</span>
+                      {e.model ? <span className="text-xs text-[var(--dor-muted)]">· {e.model}</span> : null}
+                    </div>
+                    {e.evacuationId ? (
+                      <Link
+                        href={`/dashboard/dispatch/evacuation/${e.evacuationId}`}
+                        className="dor-btn-secondary shrink-0 px-2.5 py-1 text-[11px] leading-none"
+                      >
+                        Карточка
+                      </Link>
+                    ) : null}
                   </div>
                   <div className="text-xs font-medium text-[var(--dor-text)]">{e.headline}</div>
                   <div className="text-xs text-[var(--dor-muted)]">
