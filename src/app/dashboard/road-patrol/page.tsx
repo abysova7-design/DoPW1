@@ -777,7 +777,7 @@ export default function RoadPatrolPage() {
                 href="/dashboard/registry"
                 className="mt-2 block rounded-lg border border-[var(--dor-border)] py-2 text-center text-xs text-[var(--dor-muted)] hover:border-[var(--dor-orange)] hover:text-[var(--dor-text)]"
               >
-                История реестра ТС
+                Реестр и эвакуации
               </Link>
               <button
                 type="button"

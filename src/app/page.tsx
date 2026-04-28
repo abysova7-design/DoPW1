@@ -61,7 +61,7 @@ export default async function HomePage() {
               граждан штата.
             </p>
             <div className="mt-6 flex flex-col gap-2.5 sm:mt-8 sm:flex-row sm:flex-wrap sm:gap-3">
-              <Link href="/help" className="dor-btn-secondary w-full justify-center sm:w-auto">
+              <Link href="/help" className="dor-btn-primary w-full justify-center sm:w-auto">
                 Помощь
               </Link>
               <Link href="/complaint" className="dor-btn-secondary w-full justify-center sm:w-auto">
@@ -69,9 +69,6 @@ export default async function HomePage() {
               </Link>
               <Link href="/#evacuation-check" className="dor-btn-secondary w-full justify-center sm:w-auto">
                 Проверка по номеру эвакуации
-              </Link>
-              <Link href="/#structure" className="dor-btn-primary w-full justify-center sm:w-auto">
-                Структура и задачи
               </Link>
               <Link href="/#careers" className="dor-btn-secondary w-full justify-center sm:w-auto">
                 Соискателям
@@ -90,10 +87,8 @@ export default async function HomePage() {
             время, фотоматериалы. Персональные данные владельца и сведения о сотруднике в открытый ответ не
             включаются.
           </p>
-          <div className="mt-6 w-full rounded-xl border border-[var(--dor-border)] bg-gradient-to-br from-[var(--dor-surface)] to-[var(--dor-night)] p-1">
-            <div className="dor-card w-full p-5 md:p-8">
-              <PublicEvacuationLookup />
-            </div>
+          <div className="dor-card mt-6 w-full p-5 md:p-8">
+            <PublicEvacuationLookup />
           </div>
         </section>
 
@@ -122,14 +117,12 @@ export default async function HomePage() {
             короткую форму, приходите на собеседование — мы сами свяжемся, чтобы
             согласовать встречу и поговорить о вашем опыте.
           </p>
-          <div className="mt-4 w-full rounded-xl border border-[var(--dor-orange)]/25 bg-gradient-to-br from-[var(--dor-surface)] to-[var(--dor-night)] p-1">
-            <div className="dor-card w-full p-5 md:p-8">
-              <h3 className="text-lg font-semibold">Заявка на собеседование</h3>
-              <p className="mt-1 text-sm text-[var(--dor-muted)]">
-                Все поля важны для кадрового досье (IC/OOC в рамках вашей игры).
-              </p>
-              <JobSeekerForm />
-            </div>
+          <div className="dor-card mt-4 w-full p-5 md:p-8">
+            <h3 className="text-lg font-semibold">Заявка на собеседование</h3>
+            <p className="mt-1 text-sm text-[var(--dor-muted)]">
+              Все поля важны для кадрового досье (IC/OOC в рамках вашей игры).
+            </p>
+            <JobSeekerForm />
           </div>
         </section>
 

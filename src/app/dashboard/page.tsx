@@ -512,7 +512,7 @@ export default function DashboardPage() {
                 <span className="text-2xl">📇</span>
                 <div>
                   <div className="font-medium text-sm">База ТС</div>
-                  <div className="text-xs text-[var(--dor-muted)]">История пополнения реестра</div>
+                  <div className="text-xs text-[var(--dor-muted)]">Реестр ТС и закрытые эвакуации</div>
                 </div>
               </Link>
               <Link href="/dashboard/channels"
@@ -606,7 +606,7 @@ export default function DashboardPage() {
                 <div>
                   <h2 className="text-lg font-semibold">📇 База ТС</h2>
                   <p className="mt-1 max-w-xl text-sm text-[var(--dor-muted)]">
-                    История пополнения реестра: кто вносил номер и причина (примечание при внесении).
+                    История реестра и закрытых эвакуаций: кто вносил данные, примечания и тикеты эвакуации.
                   </p>
                 </div>
                 <Link href="/dashboard/registry" className="dor-btn-primary shrink-0 text-sm">
