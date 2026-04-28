@@ -69,6 +69,15 @@ export async function POST(req: Request) {
         },
       });
 
+      await tx.vehicleRegistryAudit.create({
+        data: {
+          vehicleId: v.id,
+          actorId: user.id,
+          action: "PATROL_CREATE",
+          reason: notes || null,
+        },
+      });
+
       const xpRes = addXp(user.xp, user.level, ROAD_PATROL_XP_PER_ACTION);
       await tx.user.update({
         where: { id: user.id },

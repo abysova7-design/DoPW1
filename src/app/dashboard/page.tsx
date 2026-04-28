@@ -507,6 +507,14 @@ export default function DashboardPage() {
 
             {/* Каналы + Экзамены */}
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+              <Link href="/dashboard/registry"
+                className="dor-card flex items-center gap-3 p-4 hover:border-[var(--dor-orange)]/50 transition">
+                <span className="text-2xl">📇</span>
+                <div>
+                  <div className="font-medium text-sm">База ТС</div>
+                  <div className="text-xs text-[var(--dor-muted)]">История пополнения реестра</div>
+                </div>
+              </Link>
               <Link href="/dashboard/channels"
                 className="dor-card flex items-center gap-3 p-4 hover:border-[var(--dor-orange)]/50 transition">
                 <span className="text-2xl">📡</span>
@@ -592,13 +600,28 @@ export default function DashboardPage() {
 
         {/* ── Вкладка: Машины ── */}
         {tab === "vehicles" && (
-          <section className="dor-card p-5">
-            <h2 className="mb-4 font-semibold">🚗 Закреплённые машины</h2>
-            <p className="mb-3 text-sm text-[var(--dor-muted)]">
-              Машины закрепляются администратором. Максимум 3 на сотрудника.
-            </p>
-            <VehicleAssignments userId={me.id} />
-          </section>
+          <div className="space-y-6">
+            <section className="dor-card overflow-hidden border border-[var(--dor-orange)]/20 bg-gradient-to-br from-[var(--dor-surface)]/80 to-[var(--dor-night)] p-5">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold">📇 База ТС</h2>
+                  <p className="mt-1 max-w-xl text-sm text-[var(--dor-muted)]">
+                    История пополнения реестра: кто вносил номер и причина (примечание при внесении).
+                  </p>
+                </div>
+                <Link href="/dashboard/registry" className="dor-btn-primary shrink-0 text-sm">
+                  Открыть историю и статистику
+                </Link>
+              </div>
+            </section>
+            <section className="dor-card p-5">
+              <h2 className="mb-4 font-semibold">🚗 Закреплённые машины</h2>
+              <p className="mb-3 text-sm text-[var(--dor-muted)]">
+                Машины закрепляются администратором. Максимум 3 на сотрудника.
+              </p>
+              <VehicleAssignments userId={me.id} />
+            </section>
+          </div>
         )}
 
         {/* ── Вкладка: Служба ── */}

@@ -34,6 +34,14 @@ export async function POST(req: Request) {
       notes: notes || null,
     },
   });
+  await prisma.vehicleRegistryAudit.create({
+    data: {
+      vehicleId: v.id,
+      actorId: admin.id,
+      action: "ADMIN_CREATE",
+      reason: notes || null,
+    },
+  });
   return NextResponse.json({ vehicle: v });
 }
 

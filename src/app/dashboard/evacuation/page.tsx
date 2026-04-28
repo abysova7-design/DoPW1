@@ -59,22 +59,46 @@ export default function EvacuationPage() {
   const [headerUser, setHeaderUser] = useState<{
     isAdmin: boolean;
     positionRank: PositionRank;
+    towTruckCert: boolean;
   } | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
 
   const load = useCallback(async () => {
-    const r = await fetch("/api/evacuations/current");
+    const rAuth = await fetch("/api/auth/me", { cache: "no-store" });
+    const auth = await rAuth.json().catch(() => ({}));
+    if (!auth.user) {
+      router.replace("/login");
+      setPageLoading(false);
+      return;
+    }
+    setHeaderUser({
+      isAdmin: auth.user.isAdmin,
+      positionRank: auth.user.positionRank,
+      towTruckCert: Boolean(auth.user.towTruckCert),
+    });
+
+    const r = await fetch("/api/evacuations/current", { cache: "no-store" });
+    if (r.status === 401) {
+      router.replace("/login");
+      setPageLoading(false);
+      return;
+    }
     if (!r.ok) {
-      router.replace("/dashboard");
+      setMsg("Не удалось загрузить данные эвакуации.");
+      setEvacuation(null);
+      setPageLoading(false);
       return;
     }
-    const d = await r.json();
-    if (!d.evacuation) {
-      router.replace("/dashboard");
-      return;
+    const d = await r.json().catch(() => ({}));
+    const ev = d.evacuation as Evacuation | null | undefined;
+    if (ev) {
+      setEvacuation(ev);
+      setPickedLat(ev.pickupLat ?? null);
+      setPickedLng(ev.pickupLng ?? null);
+    } else {
+      setEvacuation(null);
     }
-    setEvacuation(d.evacuation);
-    setPickedLat(d.evacuation?.pickupLat ?? null);
-    setPickedLng(d.evacuation?.pickupLng ?? null);
+    setPageLoading(false);
   }, [router]);
 
   useEffect(() => {
@@ -82,20 +106,7 @@ export default function EvacuationPage() {
   }, [load]);
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.user) {
-          setHeaderUser({
-            isAdmin: d.user.isAdmin,
-            positionRank: d.user.positionRank,
-          });
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
+    if (!evacuation) return;
     const t = setTimeout(async () => {
       if (q.trim().length < 2) {
         setHits([]);
@@ -107,7 +118,7 @@ export default function EvacuationPage() {
       setHits(d.vehicles ?? []);
     }, 250);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, evacuation]);
 
   async function fetchHistory(plate: string) {
     if (plate.length < 2) { setHistory([]); return; }
@@ -302,10 +313,57 @@ export default function EvacuationPage() {
     }, 5000);
   }
 
+  if (pageLoading) {
+    return (
+      <div className="dor-stripes min-h-screen">
+        <SiteHeader
+          authed
+          isAdmin={headerUser?.isAdmin}
+          positionRank={headerUser?.positionRank}
+        />
+        <div className="flex min-h-[50vh] items-center justify-center text-[var(--dor-muted)]">
+          Загрузка…
+        </div>
+      </div>
+    );
+  }
+
   if (!evacuation) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-[var(--dor-muted)]">
-        Загрузка…
+      <div className="dor-stripes min-h-screen">
+        <SiteHeader
+          authed
+          isAdmin={headerUser?.isAdmin}
+          positionRank={headerUser?.positionRank}
+        />
+        <main className="mx-auto max-w-lg space-y-5 px-4 py-12">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h1 className="text-2xl font-bold">Эвакуация</h1>
+            <Link href="/dashboard" className="dor-btn-secondary text-sm">
+              Кабинет
+            </Link>
+          </div>
+          <div className="dor-card border border-[var(--dor-border)] p-6">
+            <p className="text-sm leading-relaxed text-[var(--dor-muted)]">
+              Сейчас у вас <strong className="text-[var(--dor-text)]">нет активного тикета эвакуации</strong>. Тикет
+              создаётся автоматически, когда в личном кабинете на смене выбрана задача «Эвакуатор (буксир)».
+            </p>
+            {headerUser?.towTruckCert ? (
+              <p className="mt-3 text-sm text-[var(--dor-muted)]">
+                Начните смену (если ещё не начата), нажмите нужную задачу эвакуации — откроется эта панель с
+                тикетом.
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-[var(--dor-muted)]">
+                Для работы эвакуатором нужен допуск: раздел обучения в кабинете → эвакуация.
+              </p>
+            )}
+            <Link href="/dashboard" className="mt-6 inline-flex dor-btn-primary text-sm">
+              Перейти в кабинет
+            </Link>
+          </div>
+          {msg ? <p className="text-center text-sm text-[var(--dor-orange)]">{msg}</p> : null}
+        </main>
       </div>
     );
   }

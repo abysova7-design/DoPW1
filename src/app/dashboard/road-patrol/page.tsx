@@ -92,7 +92,10 @@ export default function RoadPatrolPage() {
   const [reportBusy, setReportBusy] = useState(false);
   const reportFileRef = useRef<HTMLInputElement>(null);
   const [plateSearch, setPlateSearch] = useState("");
-  const [searchHits, setSearchHits] = useState<{ plate: string; model: string | null }[]>([]);
+  const [searchHits, setSearchHits] = useState<
+    { id: string; plate: string; model: string | null; owner?: string | null; notes?: string | null }[]
+  >([]);
+  const [plateSearchErr, setPlateSearchErr] = useState<string | null>(null);
   const [registryOpen, setRegistryOpen] = useState(false);
   const [regPlate, setRegPlate] = useState("");
   const [regModel, setRegModel] = useState("");
@@ -152,16 +155,31 @@ export default function RoadPatrolPage() {
     return () => clearInterval(t);
   }, [load]);
 
-  async function searchPlate() {
-    const q = plateSearch.trim();
+  useEffect(() => {
+    const q = plateSearch.trim().toUpperCase();
     if (q.length < 2) {
       setSearchHits([]);
+      setPlateSearchErr(null);
       return;
     }
-    const r = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
-    const d = await r.json().catch(() => ({}));
-    setSearchHits(d.vehicles ?? []);
-  }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const r = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}&take=40`, { cache: "no-store" });
+      if (cancelled) return;
+      if (!r.ok) {
+        setPlateSearchErr("Не удалось выполнить поиск (войдите в аккаунт или попробуйте позже).");
+        setSearchHits([]);
+        return;
+      }
+      const d = await r.json().catch(() => ({}));
+      setPlateSearchErr(null);
+      setSearchHits(d.vehicles ?? []);
+    }, 280);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [plateSearch]);
 
   function openReportModal(kind: PatrolReportKind) {
     setReportModalKind(kind);
@@ -735,21 +753,31 @@ export default function RoadPatrolPage() {
                 className="mt-2 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2 text-sm"
                 placeholder="Поиск по номеру (мин. 2 символа)"
                 value={plateSearch}
-                onChange={(e) => setPlateSearch(e.target.value)}
-                onBlur={searchPlate}
+                onChange={(e) => setPlateSearch(e.target.value.toUpperCase())}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.preventDefault();
+                }}
               />
-              <button type="button" className="mt-1 text-xs text-[var(--dor-orange)]" onClick={searchPlate}>
-                Найти
-              </button>
+              <p className="mt-1 text-[10px] text-[var(--dor-muted)]">
+                Результаты обновляются автоматически при вводе.
+              </p>
+              {plateSearchErr ? <p className="mt-1 text-[10px] text-red-400">{plateSearchErr}</p> : null}
               <ul className="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs">
                 {searchHits.map((v) => (
-                  <li key={v.plate} className="text-[var(--dor-muted)]">
-                    {v.plate} {v.model ? `· ${v.model}` : ""}
+                  <li key={v.id} className="text-[var(--dor-muted)]">
+                    <span className="font-mono text-[var(--dor-text)]">{v.plate}</span>
+                    {v.model ? ` · ${v.model}` : ""}
                   </li>
                 ))}
               </ul>
               <Link href="/dashboard/evacuation" className="mt-3 block dor-btn-primary py-2 text-center text-xs">
                 Тикет эвакуации
+              </Link>
+              <Link
+                href="/dashboard/registry"
+                className="mt-2 block rounded-lg border border-[var(--dor-border)] py-2 text-center text-xs text-[var(--dor-muted)] hover:border-[var(--dor-orange)] hover:text-[var(--dor-text)]"
+              >
+                История реестра ТС
               </Link>
               <button
                 type="button"
