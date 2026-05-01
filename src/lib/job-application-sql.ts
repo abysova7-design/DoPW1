@@ -38,7 +38,7 @@ type SqlRow = {
 
 function asBool(v: boolean | number | bigint): boolean {
   if (typeof v === "boolean") return v;
-  if (typeof v === "bigint") return v !== 0n;
+  if (typeof v === "bigint") return v !== BigInt(0);
   return v !== 0;
 }
 

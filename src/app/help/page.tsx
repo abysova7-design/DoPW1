@@ -227,7 +227,7 @@ export default function HelpPage() {
                   onChange={(e) => setPhone(e.target.value)}
                   required
                   maxLength={40}
-                  placeholder="+7 …"
+                  placeholder="Номер для связи в игре"
                 />
               </div>
               <div>

@@ -44,6 +44,20 @@ enum NotificationType {
   CIVIC_HELP
   STAFF_COMPLAINT
   ROAD_PATROL_REPORT
+  PAYOUT_REQUEST
+}
+
+enum PayoutRequestKind {
+  MATERIAL_HELP
+  EVACUATION_PAY
+  OTHER
+}
+
+enum PayoutRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
 }
 
 model User {
@@ -86,6 +100,26 @@ model User {
   roadPatrolReports   RoadPatrolReport[]
   roadClosures        RoadClosure[]
   vehicleRegistryAudits VehicleRegistryAudit[]
+  payoutRequests      PayoutRequest[]
+}
+
+/// Заявка сотрудника на выплату (матпомощь, эвакуации, прочее)
+model PayoutRequest {
+  id            String              @id @default(cuid())
+  userId        String
+  user          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind          PayoutRequestKind
+  details       String
+  amountNote    String?
+  status        PayoutRequestStatus @default(PENDING)
+  adminNote     String?
+  payoutDetails String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  resolvedAt    DateTime?
+
+  @@index([userId, status])
+  @@index([status, createdAt])
 }
 
 model VehicleRegistry {

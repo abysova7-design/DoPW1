@@ -48,17 +48,40 @@ export async function POST(req: Request) {
   });
 
   if (kind === "TOW_TRUCK") {
-    await prisma.evacuation.create({
-      data: {
+    const orphan = await prisma.evacuation.findFirst({
+      where: {
         userId: user.id,
-        taskId: task.id,
-        plate: "",
-        ownerNickname: "",
-        violation: "",
-        status: "DRAFT",
-        photoUrls: "[]",
+        status: { in: ["DRAFT", "ACTIVE", "DELIVERED"] },
+        OR: [
+          { taskId: null },
+          {
+            task: {
+              OR: [{ endedAt: { not: null } }, { kind: { not: "TOW_TRUCK" } }],
+            },
+          },
+        ],
       },
+      orderBy: { createdAt: "desc" },
     });
+
+    if (orphan) {
+      await prisma.evacuation.update({
+        where: { id: orphan.id },
+        data: { taskId: task.id },
+      });
+    } else {
+      await prisma.evacuation.create({
+        data: {
+          userId: user.id,
+          taskId: task.id,
+          plate: "",
+          ownerNickname: "",
+          violation: "",
+          status: "DRAFT",
+          photoUrls: "[]",
+        },
+      });
+    }
   }
 
   return NextResponse.json({ task });

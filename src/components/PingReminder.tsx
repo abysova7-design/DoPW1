@@ -9,9 +9,13 @@ const INTERVAL_MS = 10 * 60 * 1000;
 export function PingReminder({
   focusLat,
   focusLng,
+  focusEndLat,
+  focusEndLng,
 }: {
   focusLat?: number | null;
   focusLng?: number | null;
+  focusEndLat?: number | null;
+  focusEndLng?: number | null;
 }) {
   const [last, setLast] = useState<Date | null>(null);
   const [now, setNow] = useState(() => new Date());
@@ -63,8 +67,17 @@ export function PingReminder({
 
   useEffect(() => {
     if (focusLat == null || focusLng == null) return;
-    setStatus("📍 Точка вызова установлена на карте. При необходимости отправьте новую отметку.");
-  }, [focusLat, focusLng]);
+    const hasB =
+      focusEndLat != null &&
+      focusEndLng != null &&
+      Number.isFinite(focusEndLat) &&
+      Number.isFinite(focusEndLng);
+    setStatus(
+      hasB
+        ? "📍 На карте: маршрут вызова (красная — точка А, зелёная — точка Б)."
+        : "📍 Точка вызова установлена на карте. При необходимости отправьте новую отметку.",
+    );
+  }, [focusLat, focusLng, focusEndLat, focusEndLng]);
 
   async function submitPing() {
     setStatus(null);
@@ -121,12 +134,14 @@ export function PingReminder({
 
       <div className="mt-4">
         <MapClient
-          key={`${displayLat ?? "none"}:${displayLng ?? "none"}`}
+          key={`${displayLat ?? "none"}:${displayLng ?? "none"}:${focusLat ?? ""}:${focusLng ?? ""}:${focusEndLat ?? ""}:${focusEndLng ?? ""}`}
           onPick={(a, b) => { setLat(a); setLng(b); }}
           initialLat={displayLat ?? undefined}
           initialLng={displayLng ?? undefined}
           callLat={focusLat ?? undefined}
           callLng={focusLng ?? undefined}
+          callEndLat={focusEndLat ?? undefined}
+          callEndLng={focusEndLng ?? undefined}
           callLabel="Вызов"
         />
       </div>

@@ -6,7 +6,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { PingReminder } from "@/components/PingReminder";
-import { PreShiftChecklist } from "@/components/PreShiftChecklist";
 import { DisciplineSection } from "@/components/DisciplineSection";
 import { VehicleAssignments } from "@/components/VehicleAssignments";
 import {
@@ -48,6 +47,8 @@ type DispatchCall = {
   status: string;
   lat: number | null;
   lng: number | null;
+  endLat?: number | null;
+  endLng?: number | null;
   createdAt: string;
   creator: { nickname: string };
   targetId?: string | null;
@@ -62,7 +63,12 @@ export default function DashboardPage() {
   const [openCalls, setOpenCalls] = useState<DispatchCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"main" | "vehicles" | "discipline">("main");
-  const [focusCallPoint, setFocusCallPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [focusCallRoute, setFocusCallRoute] = useState<{
+    lat: number;
+    lng: number;
+    endLat?: number | null;
+    endLng?: number | null;
+  } | null>(null);
   const [reportingCall, setReportingCall] = useState<DispatchCall | null>(null);
   const [reportText, setReportText] = useState("");
   const pingSectionRef = useRef<HTMLDivElement>(null);
@@ -103,9 +109,9 @@ export default function DashboardPage() {
   }, [router]);
 
   useEffect(() => {
-    if (!focusCallPoint) return;
+    if (!focusCallRoute) return;
     pingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [focusCallPoint]);
+  }, [focusCallRoute]);
 
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => {
@@ -194,11 +200,21 @@ export default function DashboardPage() {
       return;
     }
     if (action === "accept" && call.lat != null && call.lng != null) {
-      setFocusCallPoint({ lat: call.lat, lng: call.lng });
+      setFocusCallRoute({
+        lat: call.lat,
+        lng: call.lng,
+        endLat: call.endLat,
+        endLng: call.endLng,
+      });
       setTab("main");
     }
     if (action === "onsite" && call.lat != null && call.lng != null) {
-      setFocusCallPoint({ lat: call.lat, lng: call.lng });
+      setFocusCallRoute({
+        lat: call.lat,
+        lng: call.lng,
+        endLat: call.endLat,
+        endLng: call.endLng,
+      });
       setTab("main");
     }
     refresh();
@@ -348,11 +364,18 @@ export default function DashboardPage() {
                       type="button"
                       className="dor-btn-secondary text-xs"
                       onClick={() => {
-                        setFocusCallPoint({ lat: c.lat!, lng: c.lng! });
+                        setFocusCallRoute({
+                          lat: c.lat!,
+                          lng: c.lng!,
+                          endLat: c.endLat,
+                          endLng: c.endLng,
+                        });
                         setTab("main");
                       }}
                     >
-                      Показать точку на карте
+                      {c.endLat != null && c.endLng != null
+                        ? "Показать маршрут на карте"
+                        : "Показать точку на карте"}
                     </button>
                   )}
                 </div>
@@ -499,12 +522,6 @@ export default function DashboardPage() {
         {/* ── Вкладка: Главное ── */}
         {tab === "main" && (
           <div className="space-y-6">
-            {/* Чеклист */}
-            <section className="dor-card p-5">
-              <h2 className="mb-3 font-semibold">✅ Чек-лист перед заступлением</h2>
-              <PreShiftChecklist />
-            </section>
-
             {/* Каналы + Экзамены */}
             <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
               <Link href="/dashboard/registry"
@@ -529,6 +546,22 @@ export default function DashboardPage() {
                 <div>
                   <div className="font-medium text-sm">Экзамены</div>
                   <div className="text-xs text-[var(--dor-muted)]">Очередь и результаты</div>
+                </div>
+              </Link>
+              <Link href="/dashboard/payouts"
+                className="dor-card flex items-center gap-3 p-4 hover:border-emerald-500/40 transition">
+                <span className="text-2xl">💸</span>
+                <div>
+                  <div className="font-medium text-sm">Заявки на выплату</div>
+                  <div className="text-xs text-[var(--dor-muted)]">Матпомощь, эвакуации, прочее</div>
+                </div>
+              </Link>
+              <Link href="/dashboard/laboratory"
+                className="dor-card flex items-center gap-3 p-4 hover:border-violet-500/40 transition">
+                <span className="text-2xl">🧪</span>
+                <div>
+                  <div className="font-medium text-sm">Лаборатория</div>
+                  <div className="text-xs text-[var(--dor-muted)]">Анализ проб — интерактив</div>
                 </div>
               </Link>
               {canManageJobApplications(me.positionRank, me.isAdmin) && (
@@ -591,8 +624,10 @@ export default function DashboardPage() {
             {/* Контроль присутствия */}
             <div ref={pingSectionRef}>
               <PingReminder
-                focusLat={focusCallPoint?.lat}
-                focusLng={focusCallPoint?.lng}
+                focusLat={focusCallRoute?.lat}
+                focusLng={focusCallRoute?.lng}
+                focusEndLat={focusCallRoute?.endLat ?? null}
+                focusEndLng={focusCallRoute?.endLng ?? null}
               />
             </div>
           </div>

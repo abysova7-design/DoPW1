@@ -1,4 +1,11 @@
-﻿import type { SessionOptions } from "iron-session";
+import type { SessionOptions } from "iron-session";
+
+/** Поля, сохраняемые в зашифрованной iron-session cookie */
+export type DorSessionData = {
+  userId?: string;
+  nickname?: string;
+  isAdmin?: boolean;
+};
 
 export const sessionOptions: SessionOptions = {
   password:

@@ -157,7 +157,6 @@ export function RadioProvider({ children }: { children: React.ReactNode }) {
         if (!el) {
           el = new Audio();
           el.autoplay = true;
-          el.playsInline = true;
           audioElsRef.current.set(peerUserId, el);
         }
         el.srcObject = ev.streams[0];

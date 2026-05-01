@@ -23,6 +23,8 @@ export function MapClient(
     initialLng?: number;
     callLat?: number;
     callLng?: number;
+    callEndLat?: number;
+    callEndLng?: number;
     callLabel?: string;
     dualPick?: boolean;
     pickSlot?: "A" | "B";

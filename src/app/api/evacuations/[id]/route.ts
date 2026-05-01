@@ -23,10 +23,50 @@ export async function PATCH(
   const { id } = await ctx.params;
   const ev = await prisma.evacuation.findFirst({
     where: { id, userId: user.id },
+    include: { task: { select: { id: true, endedAt: true, kind: true } } },
   });
   if (!ev) return NextResponse.json({ error: "Не найдено" }, { status: 404 });
 
+  const linkedActiveTow =
+    ev.taskId &&
+    ev.task &&
+    ev.task.kind === "TOW_TRUCK" &&
+    ev.task.endedAt == null;
+
   const body = await req.json().catch(() => ({}));
+
+  if (body.action === "abandon") {
+    if (ev.status === "CLOSED") {
+      return NextResponse.json({ error: "Уже закрыта" }, { status: 400 });
+    }
+    if (linkedActiveTow) {
+      return NextResponse.json(
+        {
+          error:
+            "Эвакуация привязана к активной задаче. Завершите задачу в кабинете или пройдите штатное закрытие тикета.",
+        },
+        { status: 400 },
+      );
+    }
+    const reason = typeof body.reason === "string" ? body.reason.trim().slice(0, 500) : "";
+    const stamp = `[Снято с контроля] ${new Date().toLocaleString("ru-RU")}${reason ? ` — ${reason}` : ""}`;
+    const nextDesc = ev.description ? `${ev.description}\n\n${stamp}` : stamp;
+    await prisma.evacuation.update({
+      where: { id },
+      data: {
+        status: "CLOSED",
+        closedAt: new Date(),
+        description: nextDesc.slice(0, 4000),
+      },
+    });
+    if (ev.taskId && ev.task && ev.task.endedAt == null) {
+      await prisma.workTask.update({
+        where: { id: ev.taskId },
+        data: { endedAt: new Date() },
+      });
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   if (body.applyVehicleId) {
     const v = await prisma.vehicleRegistry.findUnique({

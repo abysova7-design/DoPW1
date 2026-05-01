@@ -27,6 +27,7 @@ type Evacuation = {
   description: string | null;
   status: string;
   photoUrls: string;
+  createdAt: string;
 };
 type EvacHistory = {
   id: string;
@@ -61,6 +62,7 @@ export default function EvacuationPage() {
     positionRank: PositionRank;
     towTruckCert: boolean;
   } | null>(null);
+  const [stuckList, setStuckList] = useState<Evacuation[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -86,11 +88,14 @@ export default function EvacuationPage() {
     if (!r.ok) {
       setMsg("Не удалось загрузить данные эвакуации.");
       setEvacuation(null);
+      setStuckList([]);
       setPageLoading(false);
       return;
     }
     const d = await r.json().catch(() => ({}));
     const ev = d.evacuation as Evacuation | null | undefined;
+    const stuck = (d.stuckEvacuations ?? []) as Evacuation[];
+    setStuckList(stuck);
     if (ev) {
       setEvacuation(ev);
       setPickedLat(ev.pickupLat ?? null);
@@ -126,6 +131,49 @@ export default function EvacuationPage() {
     if (!r.ok) return;
     const d = await r.json();
     setHistory(d.evacuations ?? []);
+  }
+
+  async function resumeStuck(id: string) {
+    setBusy(true);
+    setMsg(null);
+    const r = await fetch("/api/evacuations/resume", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ evacuationId: id }),
+    });
+    setBusy(false);
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      setMsg(e.error ?? "Не удалось продолжить");
+      return;
+    }
+    setMsg("Задача эвакуации создана заново, тикет привязан. Можно продолжить оформление.");
+    load();
+  }
+
+  async function abandonStuck(id: string) {
+    if (
+      !confirm(
+        "Снять эвакуацию с контроля без награды XP? Используйте, если тикет «завис» после сбоя или закрытия смены.",
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    const r = await fetch(`/api/evacuations/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "abandon" }),
+    });
+    setBusy(false);
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      setMsg(e.error ?? "Не удалось закрыть");
+      return;
+    }
+    setMsg("Тикет снят с контроля.");
+    load();
   }
 
   async function applyFromHistory(h: EvacHistory) {
@@ -313,6 +361,50 @@ export default function EvacuationPage() {
     }, 5000);
   }
 
+  const stuckPanel =
+    stuckList.length > 0 ? (
+      <section className="dor-card border border-amber-500/40 bg-amber-500/5 p-5">
+        <h2 className="font-semibold text-amber-100">Незавершённые эвакуации</h2>
+        <p className="mt-1 text-xs text-[var(--dor-muted)]">
+          Тикеты без активной задачи «эвакуатор» (например, после закрытия смены или сбоя). Продолжите оформление
+          или снимите с контроля.
+        </p>
+        <ul className="mt-3 space-y-3">
+          {stuckList.map((s) => (
+            <li
+              key={s.id}
+              className="flex flex-col gap-2 rounded-xl border border-amber-500/25 bg-[var(--dor-night)]/80 p-3 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0 text-sm">
+                <div className="font-mono font-medium">{s.plate || "— без номера —"}</div>
+                <div className="text-xs text-[var(--dor-muted)]">
+                  {STATUS_RU[s.status] ?? s.status} · {new Date(s.createdAt).toLocaleString("ru-RU")}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="dor-btn-primary text-xs"
+                  onClick={() => resumeStuck(s.id)}
+                >
+                  Продолжить
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="dor-btn-secondary text-xs"
+                  onClick={() => abandonStuck(s.id)}
+                >
+                  Снять с контроля
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    ) : null;
+
   if (pageLoading) {
     return (
       <div className="dor-stripes min-h-screen">
@@ -343,6 +435,7 @@ export default function EvacuationPage() {
               Кабинет
             </Link>
           </div>
+          {stuckPanel}
           <div className="dor-card border border-[var(--dor-border)] p-6">
             <p className="text-sm leading-relaxed text-[var(--dor-muted)]">
               Сейчас у вас <strong className="text-[var(--dor-text)]">нет активного тикета эвакуации</strong>. Тикет
@@ -397,6 +490,8 @@ export default function EvacuationPage() {
             Назад в кабинет
           </Link>
         </div>
+
+        {stuckPanel}
 
         <section className="dor-card p-5">
           <h2 className="font-semibold">Поиск в базе департамента</h2>

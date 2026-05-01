@@ -5,6 +5,7 @@ import {
   ImageOverlay,
   MapContainer,
   Marker,
+  Polyline,
   useMap,
   useMapEvents,
 } from "react-leaflet";
@@ -121,6 +122,8 @@ export function SanAndreasMap({
   initialLng,
   callLat,
   callLng,
+  callEndLat,
+  callEndLng,
   callLabel = "Вызов",
   dualPick = false,
   pickSlot = "A",
@@ -133,6 +136,8 @@ export function SanAndreasMap({
   initialLng?: number;
   callLat?: number;
   callLng?: number;
+  callEndLat?: number;
+  callEndLng?: number;
   callLabel?: string;
   dualPick?: boolean;
   pickSlot?: "A" | "B";
@@ -168,6 +173,14 @@ export function SanAndreasMap({
       : "Клик — точка Б (куда доставить)."
     : "Кликните на карту, чтобы отметить свою точку";
 
+  const callHasB =
+    callLat != null &&
+    callLng != null &&
+    callEndLat != null &&
+    callEndLng != null &&
+    Number.isFinite(callEndLat) &&
+    Number.isFinite(callEndLng);
+
   return (
     <div
       className={`relative w-full overflow-hidden rounded-2xl border border-[var(--dor-border)] ${heightClass}`}
@@ -197,11 +210,21 @@ export function SanAndreasMap({
           <ClickMarker onPick={handlePick} pos={pos} />
         )}
         {callLat != null && callLng != null && (
-          <Marker
-            position={[callLat, callLng]}
-            icon={L.divIcon({
-              className: "",
-              html: `<div style="
+          <>
+            {callHasB ? (
+              <Polyline
+                positions={[
+                  [callLat, callLng],
+                  [callEndLat as number, callEndLng as number],
+                ]}
+                pathOptions={{ color: "#22c55e", weight: 3, opacity: 0.72 }}
+              />
+            ) : null}
+            <Marker
+              position={[callLat, callLng]}
+              icon={L.divIcon({
+                className: "",
+                html: `<div style="
                 width:18px;height:18px;border-radius:999px;
                 background:#dc2626;border:3px solid #fff;
                 box-shadow:0 0 0 3px rgba(220,38,38,.4);
@@ -211,12 +234,35 @@ export function SanAndreasMap({
                   position:absolute;top:-22px;left:50%;transform:translateX(-50%);
                   background:rgba(0,0,0,.75);color:#fff;font-size:10px;
                   padding:1px 6px;border-radius:4px;white-space:nowrap;
-                ">${callLabel}</div>
+                ">${callHasB ? "А · забрать" : callLabel}</div>
               </div>`,
-              iconSize: [18, 18],
-              iconAnchor: [9, 9],
-            })}
-          />
+                iconSize: [18, 18],
+                iconAnchor: [9, 9],
+              })}
+            />
+            {callHasB ? (
+              <Marker
+                position={[callEndLat as number, callEndLng as number]}
+                icon={L.divIcon({
+                  className: "",
+                  html: `<div style="
+                width:18px;height:18px;border-radius:999px;
+                background:#22c55e;border:3px solid #fff;
+                box-shadow:0 0 0 3px rgba(34,197,94,.4);
+                position:relative;
+              ">
+                <div style="
+                  position:absolute;top:-22px;left:50%;transform:translateX(-50%);
+                  background:rgba(0,0,0,.75);color:#fff;font-size:10px;
+                  padding:1px 6px;border-radius:4px;white-space:nowrap;
+                ">Б · доставить</div>
+              </div>`,
+                  iconSize: [18, 18],
+                  iconAnchor: [9, 9],
+                })}
+              />
+            ) : null}
+          </>
         )}
       </MapContainer>
 

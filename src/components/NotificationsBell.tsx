@@ -24,6 +24,7 @@ const TYPE_ICON: Record<string, string> = {
   CIVIC_HELP: "🆘",
   ROAD_PATROL_REPORT: "🛣️",
   STAFF_COMPLAINT: "📛",
+  PAYOUT_REQUEST: "💸",
 };
 
 export function NotificationsBell() {
@@ -65,6 +66,7 @@ export function NotificationsBell() {
         );
         const hasInterview = unreadNew.some((n) => n.type === "JOB_APPLICATION");
         const hasExam = unreadNew.some((n) => n.type === "TASK_ASSIGNED");
+        const hasPayout = unreadNew.some((n) => n.type === "PAYOUT_REQUEST");
         playSound(
           hasCall
             ? "dispatch"
@@ -72,7 +74,9 @@ export function NotificationsBell() {
               ? "interview"
               : hasExam
                 ? "exam"
-                : "notification",
+                : hasPayout
+                  ? "notification"
+                  : "notification",
         );
       }
     }

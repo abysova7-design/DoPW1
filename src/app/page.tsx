@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
-import { sessionOptions } from "@/lib/session";
+import { sessionOptions, type DorSessionData } from "@/lib/session";
 import { SiteHeader } from "@/components/SiteHeader";
 import { PublicGallery } from "@/components/PublicGallery";
 import { JobSeekerForm } from "@/components/JobSeekerForm";
@@ -40,7 +40,7 @@ const DEPARTMENTS = [
 ];
 
 export default async function HomePage() {
-  const session = await getIronSession(await cookies(), sessionOptions);
+  const session = await getIronSession<DorSessionData>(await cookies(), sessionOptions);
 
   return (
     <div className="dor-stripes min-h-screen">

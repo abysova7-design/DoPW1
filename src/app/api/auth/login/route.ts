@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { getIronSession } from "iron-session";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { sessionOptions } from "@/lib/session";
+import { sessionOptions, type DorSessionData } from "@/lib/session";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Неверный ник или код" }, { status: 401 });
   }
 
-  const session = await getIronSession(await cookies(), sessionOptions);
+  const session = await getIronSession<DorSessionData>(await cookies(), sessionOptions);
   session.userId = user.id;
   session.nickname = user.nickname;
   session.isAdmin = user.isAdmin;

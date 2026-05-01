@@ -31,6 +31,18 @@ type StaffComplaintRow = {
   createdAt: string;
 };
 
+type PayoutAdminRow = {
+  id: string;
+  kind: string;
+  status: string;
+  details: string;
+  amountNote: string | null;
+  adminNote: string | null;
+  payoutDetails: string | null;
+  createdAt: string;
+  user: { nickname: string; displayName: string | null };
+};
+
 type UserRow = {
   id: string;
   nickname: string;
@@ -107,6 +119,12 @@ export default function AdminPage() {
   >({});
   const [complaintSavingId, setComplaintSavingId] = useState<string | null>(null);
 
+  const [payoutRows, setPayoutRows] = useState<PayoutAdminRow[]>([]);
+  const [payoutDrafts, setPayoutDrafts] = useState<
+    Record<string, { status: string; adminNote: string; payoutDetails: string }>
+  >({});
+  const [payoutSavingId, setPayoutSavingId] = useState<string | null>(null);
+
   const refresh = useCallback(async () => {
     const r = await fetch("/api/auth/me");
     const d = await r.json();
@@ -115,18 +133,20 @@ export default function AdminPage() {
       return;
     }
     setMe(d.user);
-    const [u, v, va, sc] = await Promise.all([
+    const [u, v, va, sc, pr] = await Promise.all([
       fetch("/api/admin/users").then((r) => r.json()),
       fetch("/api/admin/vehicles").then((r) => r.json()),
       fetch("/api/vehicles/assigned?userId=ALL").then((r) =>
         r.ok ? r.json() : { vehicles: [] },
       ),
       fetch("/api/admin/staff-complaints").then((r) => (r.ok ? r.json() : { complaints: [] })),
+      fetch("/api/admin/payout-requests").then((r) => (r.ok ? r.json() : { requests: [] })),
     ]);
     setUsers(u.users ?? []);
     setVehicles(v.vehicles ?? []);
     setVaList(va.vehicles ?? []);
     setStaffComplaints(sc.complaints ?? []);
+    setPayoutRows(pr.requests ?? []);
   }, [router]);
 
   useEffect(() => {
@@ -143,6 +163,25 @@ export default function AdminPage() {
       return next;
     });
   }, [staffComplaints]);
+
+  useEffect(() => {
+    setPayoutDrafts((prev) => {
+      const next = { ...prev };
+      for (const p of payoutRows) {
+        if (!next[p.id]) {
+          next[p.id] = {
+            status: p.status,
+            adminNote: p.adminNote ?? "",
+            payoutDetails: p.payoutDetails ?? "",
+          };
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!payoutRows.some((p) => p.id === id)) delete next[id];
+      }
+      return next;
+    });
+  }, [payoutRows]);
 
   useEffect(() => {
     refresh();
@@ -339,6 +378,29 @@ export default function AdminPage() {
     refresh();
   }
 
+  async function savePayoutRequest(id: string) {
+    const draft = payoutDrafts[id];
+    if (!draft) return;
+    setPayoutSavingId(id);
+    const r = await fetch("/api/admin/payout-requests", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id,
+        status: draft.status,
+        adminNote: draft.adminNote,
+        payoutDetails: draft.payoutDetails,
+      }),
+    });
+    setPayoutSavingId(null);
+    const d = await safeJson<{ error?: string }>(r, {});
+    if (!r.ok) {
+      alert(d.error ?? "Ошибка");
+      return;
+    }
+    refresh();
+  }
+
   async function sendNotify(e: React.FormEvent) {
     e.preventDefault();
     const r = await fetch("/api/admin/notify", {
@@ -511,6 +573,115 @@ export default function AdminPage() {
               </button>
             </div>
           </form>
+        </section>
+
+        <section className="dor-card p-6">
+          <h2 className="text-lg font-semibold">💸 Заявки на выплату</h2>
+          <p className="mt-1 text-sm text-[var(--dor-muted)]">
+            Сотрудники подают заявки из кабинета. Смена статуса отправляет им уведомление.
+          </p>
+          {payoutRows.length === 0 ? (
+            <p className="mt-4 text-sm text-[var(--dor-muted)]">Заявок пока нет.</p>
+          ) : (
+            <ul className="mt-4 space-y-4">
+              {payoutRows.map((p) => {
+                const draft = payoutDrafts[p.id] ?? {
+                  status: p.status,
+                  adminNote: p.adminNote ?? "",
+                  payoutDetails: p.payoutDetails ?? "",
+                };
+                const kindRu =
+                  p.kind === "MATERIAL_HELP"
+                    ? "Материальная помощь"
+                    : p.kind === "EVACUATION_PAY"
+                      ? "Эвакуации"
+                      : p.kind === "OTHER"
+                        ? "Прочее"
+                        : p.kind;
+                return (
+                  <li
+                    key={p.id}
+                    className="rounded-xl border border-emerald-500/20 bg-emerald-950/10 p-4 text-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <span className="font-semibold text-emerald-200">{kindRu}</span>
+                        <span className="text-[var(--dor-muted)]">
+                          {" "}
+                          · {p.user.displayName ?? p.user.nickname}
+                        </span>
+                      </div>
+                      <span className="text-xs text-[var(--dor-muted)]">
+                        {new Date(p.createdAt).toLocaleString("ru-RU")}
+                      </span>
+                    </div>
+                    <p className="mt-2 whitespace-pre-wrap text-[var(--dor-text)]">{p.details}</p>
+                    {p.amountNote ? (
+                      <p className="mt-1 text-xs text-[var(--dor-muted)]">Сумма/ориентир: {p.amountNote}</p>
+                    ) : null}
+                    <div className="mt-3 grid gap-2 border-t border-[var(--dor-border)] pt-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs text-[var(--dor-muted)]">Статус</label>
+                        <select
+                          className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2"
+                          value={draft.status}
+                          onChange={(e) =>
+                            setPayoutDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: { ...draft, status: e.target.value },
+                            }))
+                          }
+                        >
+                          <option value="PENDING">На рассмотрении</option>
+                          <option value="APPROVED">Одобрено</option>
+                          <option value="REJECTED">Отклонено</option>
+                          <option value="PAID">Выплачено</option>
+                        </select>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs text-[var(--dor-muted)]">Комментарий сотруднику</label>
+                        <textarea
+                          rows={2}
+                          className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2 text-xs"
+                          value={draft.adminNote}
+                          onChange={(e) =>
+                            setPayoutDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: { ...draft, adminNote: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="text-xs text-[var(--dor-muted)]">
+                          Детали выплаты (реквизиты, дата, сумма)
+                        </label>
+                        <textarea
+                          rows={2}
+                          className="mt-1 w-full rounded-lg border border-[var(--dor-border)] bg-[var(--dor-night)] px-2 py-2 text-xs"
+                          value={draft.payoutDetails}
+                          onChange={(e) =>
+                            setPayoutDrafts((prev) => ({
+                              ...prev,
+                              [p.id]: { ...draft, payoutDetails: e.target.value },
+                            }))
+                          }
+                        />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="mt-2 dor-btn-secondary text-xs"
+                      disabled={payoutSavingId === p.id}
+                      onClick={() => savePayoutRequest(p.id)}
+                    >
+                      {payoutSavingId === p.id ? "Сохранение…" : "Сохранить и уведомить"}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
 
         <section className="dor-card p-6">
